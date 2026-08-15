@@ -1,223 +1,157 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
-import { FilesetResolver, FaceLandmarker, DrawingUtils, PoseLandmarker } from "@mediapipe/tasks-vision";
+import { API_BASE } from "@/app/lib/api";
+
+export interface HRBehaviorScores {
+  eyeContact: number;       // 0-100
+  attention: number;        // 0-100
+  stability: number;        // 0-100  (mapped from movement_score)
+  confidenceScore: number;  // 0-100
+  postureScore: number;     // 0-100
+  postureQuality: string;   // "good" | "acceptable" | "poor"
+  gazeDirection: string;    // "center" | "left" | "right" | "up" | "down"
+  nervousnessLevel: string; // "calm" | "slightly_nervous" | "nervous" | "highly_nervous"
+  confidenceLevel: string;  // "high" | "moderate" | "low"
+  attentionState: string;   // "fully_attentive" | "partially_attentive" | "inattentive"
+  feedback: string[];       // live feedback messages from the engine
+  overall: string;          // overall status string
+}
 
 interface HRBehaviorMonitorProps {
   onScoreUpdate: (scores: HRBehaviorScores) => void;
   isActive: boolean;
+  sessionId?: string | null;
 }
 
-export interface HRBehaviorScores {
-  eyeContact: number; // 0-100
-  attention: number; // 0-100
-  stability: number; // 0-100
-}
+const DEFAULT_SCORES: HRBehaviorScores = {
+  eyeContact: 0,
+  attention: 0,
+  stability: 0,
+  confidenceScore: 0,
+  postureScore: 0,
+  postureQuality: "unknown",
+  gazeDirection: "unknown",
+  nervousnessLevel: "unknown",
+  confidenceLevel: "unknown",
+  attentionState: "unknown",
+  feedback: [],
+  overall: "",
+};
 
-export default function HRBehaviorMonitor({ onScoreUpdate, isActive }: HRBehaviorMonitorProps) {
+export default function HRBehaviorMonitor({
+  onScoreUpdate,
+  isActive,
+  sessionId,
+}: HRBehaviorMonitorProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const faceLandmarkerRef = useRef<FaceLandmarker | null>(null);
-  const poseLandmarkerRef = useRef<PoseLandmarker | null>(null);
-  const requestRef = useRef<number>(0);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const [isInitializing, setIsInitializing] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const lastVideoTimeRef = useRef<number>(-1);
+  const [connected, setConnected] = useState(false);
 
-  // Accumulated scores
-  const scoreHistory = useRef<{
-    eyeContact: number[];
-    attention: number[];
-    stability: number[];
-  }>({
-    eyeContact: [],
-    attention: [],
-    stability: [],
-  });
-
-  // Calculate moving average
-  const updateAverages = useCallback(() => {
-    if (!isActive) return;
-
-    const hist = scoreHistory.current;
-    if (hist.eyeContact.length === 0) return;
-
-    const avg = (arr: number[]) =>
-      arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
-
-    onScoreUpdate({
-      eyeContact: avg(hist.eyeContact),
-      attention: avg(hist.attention),
-      stability: avg(hist.stability),
-    });
-  }, [isActive, onScoreUpdate]);
-
-  useEffect(() => {
-    const updateInterval = setInterval(updateAverages, 2000);
-    return () => clearInterval(updateInterval);
-  }, [updateAverages]);
-
+  // Start webcam
   useEffect(() => {
     let stream: MediaStream | null = null;
-    let isActiveMount = true;
+    let active = true;
 
-    async function initializeMediaPipe() {
+    async function initCamera() {
       try {
-        setIsInitializing(true);
-        const vision = await FilesetResolver.forVisionTasks(
-          "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm"
-        );
-
-        faceLandmarkerRef.current = await FaceLandmarker.createFromOptions(vision, {
-          baseOptions: {
-            modelAssetPath: `https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task`,
-            delegate: "GPU"
-          },
-          outputFaceBlendshapes: true,
-          runningMode: "VIDEO",
-          numFaces: 1
-        });
-
-        poseLandmarkerRef.current = await PoseLandmarker.createFromOptions(vision, {
-             baseOptions: {
-                modelAssetPath: `https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task`,
-                delegate: "GPU"
-              },
-              runningMode: "VIDEO",
-              numPoses: 1
-        });
-
-
         stream = await navigator.mediaDevices.getUserMedia({
-          video: { width: 640, height: 480, facingMode: "user" }
+          video: { width: 640, height: 480, facingMode: "user" },
         });
-
-        if (videoRef.current && isActiveMount) {
+        if (videoRef.current && active) {
           videoRef.current.srcObject = stream;
           videoRef.current.play();
+          setIsInitializing(false);
         }
-
-        setIsInitializing(false);
-      } catch (err: unknown) {
-        console.error("Initialization error:", err);
-        const errorMessage = err instanceof Error ? err.message : "Camera access denied";
-        if (isActiveMount) setError(errorMessage);
+      } catch (err) {
+        console.error("Camera init error:", err);
+        if (active)
+          setError(
+            err instanceof Error ? err.message : "Camera access denied"
+          );
       }
     }
 
-    initializeMediaPipe();
+    initCamera();
 
     return () => {
-      isActiveMount = false;
-      if (requestRef.current) cancelAnimationFrame(requestRef.current);
-      if (stream) {
-        stream.getTracks().forEach((track) => track.stop());
-      }
-      if (faceLandmarkerRef.current) {
-         faceLandmarkerRef.current.close()
-      }
-      if (poseLandmarkerRef.current) {
-          poseLandmarkerRef.current.close()
-      }
+      active = false;
+      if (stream) stream.getTracks().forEach((t) => t.stop());
     };
   }, []);
 
-  const renderLoop = useCallback(() => {
-    if (!videoRef.current || !canvasRef.current || !faceLandmarkerRef.current || !poseLandmarkerRef.current || !isActive) {
-      requestRef.current = requestAnimationFrame(renderLoop);
-      return;
-    }
-
+  // Capture frame as base64 JPEG
+  const captureFrame = useCallback((): string | null => {
     const video = videoRef.current;
-    if (video.readyState >= 2 && video.currentTime !== lastVideoTimeRef.current) {
-      lastVideoTimeRef.current = video.currentTime;
-      const timestampMs = performance.now();
-      
-      const faceResults = faceLandmarkerRef.current.detectForVideo(video, timestampMs);
-      const poseResults = poseLandmarkerRef.current.detectForVideo(video, timestampMs);
+    const canvas = canvasRef.current;
+    if (!video || !canvas || video.readyState < 2) return null;
 
-      const canvasCtx = canvasRef.current.getContext("2d");
-      if (canvasCtx) {
-        canvasCtx.save();
-        canvasCtx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+    canvas.width = 640;
+    canvas.height = 480;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return null;
 
-        let eyeContactScore = 0;
-        let attentionScore = 0;
-        let stabilityScore = 100; // Assume stable initially
+    ctx.drawImage(video, 0, 0, 640, 480);
+    return canvas.toDataURL("image/jpeg", 0.6); // moderate quality to keep payload small
+  }, []);
 
-         const drawingUtils = new DrawingUtils(canvasCtx);
+  // Send frame to backend for analysis
+  const analyzeFrame = useCallback(async () => {
+    if (!isActive) return;
 
-        // Attention is basically: is there a face?
-        if (faceResults.faceLandmarks.length > 0) {
-          attentionScore = 100;
-          const landmarks = faceResults.faceLandmarks[0];
+    const base64 = captureFrame();
+    if (!base64) return;
 
-          // Simplified eye contact estimation (looking mostly forward)
-          const leftEye = landmarks[159]; // Top of left eye
-          const rightEye = landmarks[386]; // Top of right eye
-          const nose = landmarks[1]; // Nose tip
+    try {
+      const res = await fetch(`${API_BASE}/api/analyze-behavior`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          image: base64,
+          sessionId: sessionId || undefined,
+        }),
+      });
 
-          // Very rudimentary Euler angle proxy using face landmarks
-          // Assuming nose x is normally right between the eyes when looking straight
-          const midX = (leftEye.x + rightEye.x) / 2;
-          const deltaX = Math.abs(midX - nose.x);
-          
-          if (deltaX < 0.05) eyeContactScore = 100;
-          else if (deltaX < 0.1) eyeContactScore = 80;
-          else if (deltaX < 0.15) eyeContactScore = 50;
-          else eyeContactScore = 20;
+      if (!res.ok) return;
 
-          // Optional: draw face mesh for debugging/visuals
-          drawingUtils.drawConnectors(
-               landmarks,
-               FaceLandmarker.FACE_LANDMARKS_TESSELATION,
-               { color: "#C0C0C070", lineWidth: 1 }
-           );
-        }
+      const data = await res.json();
+      setConnected(true);
 
-        // Stability proxy using shoulders
-        if (poseResults.landmarks.length > 0) {
-            const pose = poseResults.landmarks[0];
-            const leftShoulder = pose[11];
-            const rightShoulder = pose[12];
+      const scores: HRBehaviorScores = {
+        eyeContact: data.eye_contact_score ?? (data.eye_contact === "good" ? 100 : data.eye_contact === "moderate" ? 60 : 20),
+        attention: data.attention_score ?? (data.presence ? 100 : 0),
+        stability: data.movement_score ?? 80,
+        confidenceScore: data.confidence_score ?? 0,
+        postureScore: data.posture_score ?? (data.posture?.is_good ? 80 : 40),
+        postureQuality: data.posture_quality ?? "unknown",
+        gazeDirection: data.gaze_direction ?? "unknown",
+        nervousnessLevel: data.nervousness_level ?? "unknown",
+        confidenceLevel: data.confidence_level ?? "unknown",
+        attentionState: data.attention_state ?? "unknown",
+        feedback: data.feedback ?? [],
+        overall: data.overall ?? "",
+      };
 
-             // Check vertical alignment of shoulders (should be roughly level)
-             const shoulderTilt = Math.abs(leftShoulder.y - rightShoulder.y);
-             if (shoulderTilt > 0.1) stabilityScore -= 30; // Severe tilt
-             else if (shoulderTilt > 0.05) stabilityScore -= 10;
-        }
-
-
-        // Store in history
-        if (scoreHistory.current.attention.length > 100) {
-           scoreHistory.current.attention.shift();
-           scoreHistory.current.eyeContact.shift();
-           scoreHistory.current.stability.shift();
-        }
-
-        scoreHistory.current.attention.push(attentionScore);
-        scoreHistory.current.eyeContact.push(eyeContactScore);
-        scoreHistory.current.stability.push(stabilityScore);
-
-        canvasCtx.restore();
-      }
+      onScoreUpdate(scores);
+    } catch {
+      // Network error — silently skip this frame
     }
-    requestRef.current = requestAnimationFrame(renderLoop);
-  }, [isActive]);
+  }, [isActive, captureFrame, sessionId, onScoreUpdate]);
 
-
+  // Polling loop — send a frame every ~600ms
   useEffect(() => {
-    if (!isInitializing && isActive) {
-      requestRef.current = requestAnimationFrame(renderLoop);
-    }
-    return () => {
-      if (requestRef.current) {
-        cancelAnimationFrame(requestRef.current);
-      }
-    };
-  }, [isInitializing, isActive, renderLoop]);
+    if (isInitializing || !isActive) return;
 
+    intervalRef.current = setInterval(analyzeFrame, 600);
+
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, [isInitializing, isActive, analyzeFrame]);
 
   if (error) {
     return (
@@ -236,25 +170,28 @@ export default function HRBehaviorMonitor({ onScoreUpdate, isActive }: HRBehavio
         className="w-full h-full object-cover transform scale-x-[-1]"
         style={{ opacity: isInitializing ? 0.5 : 1 }}
       />
-      <canvas
-        ref={canvasRef}
-        width={640}
-        height={480}
-        className="absolute top-0 left-0 w-full h-full object-cover transform scale-x-[-1] pointer-events-none"
-      />
-      
+      {/* Hidden canvas for frame capture */}
+      <canvas ref={canvasRef} className="hidden" />
+
       {isInitializing && (
-         <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/60 backdrop-blur-sm z-10">
-            <div className="animate-spin h-8 w-8 text-blue-500 mx-auto mb-4 border-4 border-blue-500/30 border-t-blue-500 rounded-full"></div>
-            <p className="text-white text-sm font-medium">Loading AI Models...</p>
-         </div>
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/60 backdrop-blur-sm z-10">
+          <div className="animate-spin h-8 w-8 text-blue-500 mx-auto mb-4 border-4 border-blue-500/30 border-t-blue-500 rounded-full" />
+          <p className="text-white text-sm font-medium">
+            Starting Camera...
+          </p>
+        </div>
       )}
 
-       {/* Debug / Status Indicator */}
-       {!isInitializing && isActive && (
+      {!isInitializing && isActive && (
         <div className="absolute top-4 right-4 flex items-center gap-2 bg-black/50 backdrop-blur px-3 py-1.5 rounded-full z-20">
-          <div className="w-2.5 h-2.5 bg-green-500 rounded-full animate-pulse" />
-          <span className="text-white text-xs font-semibold">Live Analysis</span>
+          <div
+            className={`w-2.5 h-2.5 rounded-full animate-pulse ${
+              connected ? "bg-green-500" : "bg-yellow-500"
+            }`}
+          />
+          <span className="text-white text-xs font-semibold">
+            {connected ? "Live Analysis" : "Connecting..."}
+          </span>
         </div>
       )}
     </div>

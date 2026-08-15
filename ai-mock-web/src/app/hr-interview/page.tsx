@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Mic, MicOff, Send, MessageSquare, Loader2, PlayCircle, StopCircle, RefreshCcw, Volume2 } from "lucide-react";
 import { API_BASE } from "../lib/api";
 import { useTTS } from "@/hooks/useTTS";
-import HRBehaviorMonitor, { HRBehaviorScores } from "@/components/HRBehaviorMonitor";
+import HRBehaviorMonitor, { type HRBehaviorScores } from "@/components/HRBehaviorMonitor";
 import SoftSkillsFeedback from "@/components/SoftSkillsFeedback";
 import InterviewSummary from "@/components/InterviewSummary";
 
@@ -41,7 +41,12 @@ export default function HRInterviewPage() {
   const [questionNumber, setQuestionNumber] = useState(1);
   const [feedback, setFeedback] = useState<FeedbackData | null>(null);
   const [softSkills, setSoftSkills] = useState<SoftSkillsFeedbackData | null>(null);
-  const [behaviorScores, setBehaviorScores] = useState<HRBehaviorScores>({ eyeContact: 0, attention: 0, stability: 0 });
+  const [behaviorScores, setBehaviorScores] = useState<HRBehaviorScores>({
+    eyeContact: 0, attention: 0, stability: 0,
+    confidenceScore: 0, postureScore: 0, postureQuality: "unknown",
+    gazeDirection: "unknown", nervousnessLevel: "unknown", confidenceLevel: "unknown",
+    attentionState: "unknown", feedback: [], overall: "",
+  });
 
   const { speak, stop: stopTTS } = useTTS();
   const [userAnswer, setUserAnswer] = useState("");
@@ -219,9 +224,14 @@ export default function HRInterviewPage() {
                     Live Analysis
                   </h3>
                   <div className="aspect-video bg-black rounded-lg overflow-hidden border border-gray-200">
-                    <HRBehaviorMonitor onScoreUpdate={handleScoreUpdate} isActive={!isComplete} />
+                    <HRBehaviorMonitor onScoreUpdate={handleScoreUpdate} isActive={!isComplete} sessionId={sessionId} />
                   </div>
-                   <div className="mt-4 grid grid-cols-3 gap-2">
+                   {/* Score Grid */}
+                   <div className="mt-4 grid grid-cols-5 gap-2">
+                     <div className="bg-gray-50 p-3 rounded-lg text-center border">
+                        <div className="text-xs text-gray-500 mb-1">Confidence</div>
+                        <div className="font-bold text-indigo-600">{behaviorScores.confidenceScore}%</div>
+                     </div>
                      <div className="bg-gray-50 p-3 rounded-lg text-center border">
                         <div className="text-xs text-gray-500 mb-1">Eye Contact</div>
                         <div className="font-bold text-primary">{behaviorScores.eyeContact.toFixed(0)}%</div>
@@ -231,10 +241,26 @@ export default function HRInterviewPage() {
                          <div className="font-bold text-green-600">{behaviorScores.attention.toFixed(0)}%</div>
                      </div>
                      <div className="bg-gray-50 p-3 rounded-lg text-center border">
-                         <div className="text-xs text-gray-500 mb-1">Stability</div>
+                         <div className="text-xs text-gray-500 mb-1">Posture</div>
+                         <div className="font-bold text-amber-600">{behaviorScores.postureScore.toFixed(0)}%</div>
+                     </div>
+                     <div className="bg-gray-50 p-3 rounded-lg text-center border">
+                         <div className="text-xs text-gray-500 mb-1">Movement</div>
                          <div className="font-bold text-blue-600">{behaviorScores.stability.toFixed(0)}%</div>
                      </div>
                    </div>
+                   {/* Live Feedback Messages */}
+                   {behaviorScores.feedback.length > 0 && (
+                     <div className="mt-3 space-y-1">
+                       {behaviorScores.feedback.map((msg, i) => (
+                         <p key={i} className="text-sm text-gray-700 px-1">{msg}</p>
+                       ))}
+                     </div>
+                   )}
+                   {/* Overall Status */}
+                   {behaviorScores.overall && (
+                     <p className="mt-2 text-center text-sm font-medium text-gray-800">{behaviorScores.overall}</p>
+                   )}
                 </div>
               </div>
 

@@ -27,21 +27,50 @@ POSTURE_ENGINE_DIR = os.path.join(
     "..",
     "Postureanalysis-main"
 )
-if os.path.isdir(POSTURE_ENGINE_DIR):
-    sys.path.insert(0, os.path.abspath(POSTURE_ENGINE_DIR))
+POSTURE_ENGINE_DIR = os.path.abspath(POSTURE_ENGINE_DIR)
+if os.path.isdir(POSTURE_ENGINE_DIR) and POSTURE_ENGINE_DIR not in sys.path:
+    sys.path.insert(0, POSTURE_ENGINE_DIR)
 
-# Try to import the behavioral analysis engine and its config
+# Try to import the behavioral analysis engine and its config.
+# PROBLEM: 12 files inside Postureanalysis-main do `import config`, but
+# the backend's own config.py is already in sys.modules.  We temporarily
+# swap sys.modules["config"] to the posture engine's config while
+# importing the engine, then restore the backend's config afterward.
+import importlib.util as _ilu
+
 ENGINE_AVAILABLE = False
 ENGINE_CONFIG = None
 try:
+    # 1. Load the posture engine's config.py under a private name
+    _cfg_path = os.path.join(POSTURE_ENGINE_DIR, "config.py")
+    _spec = _ilu.spec_from_file_location("posture_config", _cfg_path)
+    _posture_cfg = _ilu.module_from_spec(_spec)
+    _spec.loader.exec_module(_posture_cfg)
+
+    # 2. Swap sys.modules["config"] so `import config` inside the engine
+    #    resolves to the posture config, not the backend's config.
+    _backend_config = sys.modules.get("config")
+    sys.modules["config"] = _posture_cfg
+
     from engine import BehaviorAnalysisEngine
-    import config as engine_config
+
+    # 3. Restore the backend's own config
+    if _backend_config is not None:
+        sys.modules["config"] = _backend_config
+    else:
+        del sys.modules["config"]
+
     ENGINE_AVAILABLE = True
-    ENGINE_CONFIG = engine_config
+    ENGINE_CONFIG = _posture_cfg
     logger.info("Postureanalysis-main engine loaded successfully")
 except ImportError as e:
+    # Restore backend config on failure too
+    if "_backend_config" in dir() and _backend_config is not None:
+        sys.modules["config"] = _backend_config
     logger.warning(f"Could not import BehaviorAnalysisEngine: {e}")
 except Exception as e:
+    if "_backend_config" in dir() and _backend_config is not None:
+        sys.modules["config"] = _backend_config
     logger.warning(f"Error loading BehaviorAnalysisEngine: {e}")
 
 # Fallback: try mediapipe directly for basic mode
@@ -168,6 +197,29 @@ class VisionService:
             if presence:
                 self.last_face_time = now
 
+            # When no face is detected, zero out all behaviour scores
+            # instead of showing misleading defaults (e.g. 50 %).
+            if not presence:
+                return {
+                    "presence": False,
+                    "eye_contact": "away",
+                    "confidence_score": 0,
+                    "posture": {"slouch_angle": 0.0, "is_good": True},
+                    "head_pose": {"yaw": 0.0, "pitch": 0.0},
+                    "feedback": ["✗ Face not detected — please look at the camera"],
+                    "overall": "😟 Look at the camera and sit straight",
+                    "timestamp": now,
+                    "attention_score": 0,
+                    "attention_state": "away_from_screen",
+                    "posture_quality": "unknown",
+                    "posture_score": 0,
+                    "eye_contact_score": 0,
+                    "gaze_direction": "unknown",
+                    "movement_score": 0,
+                    "nervousness_level": "unknown",
+                    "confidence_level": "low_confidence",
+                }
+
             # Posture info
             posture_data = analysis.get("posture", {})
             posture_quality = posture_data.get("posture_quality")
@@ -175,6 +227,13 @@ class VisionService:
             posture_score = posture_data.get("posture_score", 0.5)
             posture_issues = posture_data.get("issues", [])
             shoulder_angle = posture_data.get("shoulder_angle", 0.0)
+            is_calibrated = posture_data.get("calibrated", False)
+
+            # During posture calibration (first ~18s), the analyzer returns
+            # a default 0.5.  Show a reasonable default instead.
+            if not is_calibrated and posture_quality_str in ("unknown", "Unknown"):
+                posture_score = 0.8
+                posture_quality_str = "calibrating"
 
             # Eye contact / gaze info
             gaze_data = analysis.get("eye_contact", {})
@@ -200,8 +259,15 @@ class VisionService:
             # Movement info
             movement_data = analysis.get("movement", {})
             movement_score = movement_data.get("movement_score", 0.5)
+            is_stable = movement_data.get("is_stable", True)
             nervousness = movement_data.get("nervousness_level")
             nervousness_str = nervousness.value if hasattr(nervousness, 'value') else str(nervousness)
+
+            # During warm-up the movement deque is nearly empty, so the
+            # smoothed score can be near 0 even though the user is calm.
+            # Use the is_stable flag as ground truth.
+            if is_stable and movement_score < 0.5:
+                movement_score = max(movement_score, 0.8)
 
             # Confidence score from engine
             confidence_data = scores.get("confidence", {})

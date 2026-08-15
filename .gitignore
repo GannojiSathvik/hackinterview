@@ -54,3 +54,4 @@ start_all.sh
 *.log
 nohup.out
 backend.log
+interview-backend/.env

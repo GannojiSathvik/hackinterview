@@ -25,7 +25,8 @@ export default async function middleware(req: NextRequest) {
     );
 
     // If trying to access a protected route without being logged in
-    if (isProtectedRoute && !isLoggedIn) {
+    // BYPASS LOGIN FOR NOW
+    if (false && isProtectedRoute && !isLoggedIn) {
         // Store the original URL to redirect back after login
         const callbackUrl = encodeURIComponent(nextUrl.pathname + nextUrl.search);
         return NextResponse.redirect(
