@@ -19,7 +19,7 @@ load_dotenv()
 # Format: postgresql+asyncpg://user:password@host:port/database
 DATABASE_URL = os.getenv(
     "DATABASE_URL", 
-    "postgresql+asyncpg://postgres:postgres@localhost:5432/interviews"
+    "postgresql+asyncpg://postgres:postgres@127.0.0.1:15432/interviews"
 )
 
 # For sync operations (like Alembic migrations)

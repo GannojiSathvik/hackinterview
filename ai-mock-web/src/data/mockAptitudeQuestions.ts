@@ -1,0 +1,109 @@
+/**
+ * Mock Aptitude Questions
+ * 10 questions across Quantitative Aptitude, Logical Reasoning, and Data Interpretation.
+ */
+
+import type { Question } from "@/types/assessment";
+
+export const mockAptitudeQuestions: Question[] = [
+  // ── Quantitative Aptitude ──────────────────────────────────────
+  {
+    id: 1,
+    question:
+      "A train 250 m long is running at a speed of 90 km/h. How long will it take to cross a platform 150 m long?",
+    options: ["12 seconds", "16 seconds", "18 seconds", "20 seconds"],
+    correctAnswer: 1, // 16 seconds
+    category: "Quantitative Aptitude",
+    difficulty: "Medium",
+  },
+  {
+    id: 2,
+    question:
+      "If the compound interest on a sum for 2 years at 10% per annum is ₹525, what is the simple interest on the same sum at the same rate for 2 years?",
+    options: ["₹400", "₹450", "₹500", "₹550"],
+    correctAnswer: 2, // ₹500
+    category: "Quantitative Aptitude",
+    difficulty: "Medium",
+  },
+  {
+    id: 3,
+    question:
+      "A and B can complete a work in 12 days and 18 days respectively. If they work together, in how many days will the work be completed?",
+    options: ["6.2 days", "7.2 days", "8.4 days", "9 days"],
+    correctAnswer: 1, // 7.2 days
+    category: "Quantitative Aptitude",
+    difficulty: "Easy",
+  },
+  {
+    id: 4,
+    question:
+      "The average of 5 consecutive odd numbers is 27. What is the largest number?",
+    options: ["29", "31", "33", "35"],
+    correctAnswer: 1, // 31
+    category: "Quantitative Aptitude",
+    difficulty: "Easy",
+  },
+
+  // ── Logical Reasoning ──────────────────────────────────────────
+  {
+    id: 5,
+    question:
+      "If FRIEND is coded as HUMJTK, how is CANDLE coded?",
+    options: ["EDRIRL", "DCPFNG", "EDRFNG", "ECPFMG"],
+    correctAnswer: 0, // EDRIRL – each letter shifted +2
+    category: "Logical Reasoning",
+    difficulty: "Medium",
+  },
+  {
+    id: 6,
+    question:
+      "In a row of 40 students, Rakesh is 13th from the left and Suresh is 9th from the right. How many students are between them?",
+    options: ["17", "18", "19", "20"],
+    correctAnswer: 2, // 19
+    category: "Logical Reasoning",
+    difficulty: "Easy",
+  },
+  {
+    id: 7,
+    question:
+      "Find the next number in the series: 2, 6, 12, 20, 30, ?",
+    options: ["40", "42", "44", "48"],
+    correctAnswer: 1, // 42  (n*(n+1): 1×2, 2×3, 3×4 … 6×7)
+    category: "Logical Reasoning",
+    difficulty: "Medium",
+  },
+  {
+    id: 8,
+    question:
+      "Statement: All roses are flowers. Some flowers are red.\nConclusion I: Some roses are red.\nConclusion II: Some flowers are roses.",
+    options: [
+      "Only Conclusion I follows",
+      "Only Conclusion II follows",
+      "Both follow",
+      "Neither follows",
+    ],
+    correctAnswer: 1, // Only Conclusion II follows
+    category: "Logical Reasoning",
+    difficulty: "Hard",
+  },
+
+  // ── Data Interpretation ────────────────────────────────────────
+  {
+    id: 9,
+    question:
+      "A company's revenue was ₹40 lakh in Q1, ₹55 lakh in Q2, ₹45 lakh in Q3, and ₹60 lakh in Q4. What is the percentage increase from Q1 to Q4?",
+    options: ["25%", "40%", "50%", "60%"],
+    correctAnswer: 2, // 50%
+    category: "Data Interpretation",
+    difficulty: "Easy",
+  },
+  {
+    id: 10,
+    question:
+      "In an election between two candidates, 75% of voters cast their votes and the winning candidate got 60% of the votes cast. If the total number of voters is 8,000, by how many votes did the winning candidate win?",
+    options: ["1,000", "1,200", "1,400", "1,600"],
+    correctAnswer: 1, // 1,200
+    category: "Data Interpretation",
+    difficulty: "Hard",
+  },
+];

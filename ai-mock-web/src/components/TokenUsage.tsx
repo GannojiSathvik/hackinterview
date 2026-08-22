@@ -1,9 +1,16 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
 import { Zap, TrendingUp, ChevronDown, ChevronUp } from "lucide-react";
 import { API_BASE } from "@/app/lib/api";
+
+// The assessment test/review screens have their own sticky footer action
+// buttons (Review Answers / Submit Final Assessment) anchored to this same
+// bottom-right corner — hide this widget there to avoid covering them.
+// Every other route keeps the existing fixed bottom-right placement.
+const HIDDEN_ON_ROUTES = new Set(["/assessment/test", "/assessment/review"]);
 
 interface TokenStats {
     input_tokens: number;
@@ -18,6 +25,7 @@ interface TokenUsageProps {
 }
 
 export default function TokenUsage({ sessionId, refreshInterval = 10000 }: TokenUsageProps) {
+    const pathname = usePathname();
     const [sessionStats, setSessionStats] = useState<TokenStats | null>(null);
     const [globalStats, setGlobalStats] = useState<TokenStats | null>(null);
     const [isExpanded, setIsExpanded] = useState(false);
@@ -65,6 +73,10 @@ export default function TokenUsage({ sessionId, refreshInterval = 10000 }: Token
         total_tokens: 0,
         api_calls: 0
     };
+
+    if (pathname && HIDDEN_ON_ROUTES.has(pathname)) {
+        return null;
+    }
 
     return (
         <motion.div

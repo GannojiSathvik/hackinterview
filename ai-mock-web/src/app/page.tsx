@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
-import { Moon, Sun, Zap, Award, Shield, FileText, Sparkles, Mic, Layers } from "lucide-react"
+import { Moon, Sun, Zap, Award, Shield, FileText, Sparkles, Mic, Layers, ClipboardCheck } from "lucide-react"
 import { useTheme } from "next-themes"
 
 export default function Home() {
@@ -191,12 +191,12 @@ export default function Home() {
           </div>
 
           {/* Cards Row */}
-          <div className="flex flex-col lg:flex-row items-stretch justify-center gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
 
             {/* Card 1: Resume Analyzer */}
             <Link
               href="/resume-analyzer"
-              className="group flex-1 max-w-sm lg:max-w-none lg:flex-[0_0_28%] bg-card border border-border rounded-[20px] p-8 shadow-md hover:shadow-xl hover:-translate-y-2 transition-all duration-300 flex flex-col"
+              className="group bg-card border border-border rounded-[20px] p-8 shadow-md hover:shadow-xl hover:-translate-y-2 transition-all duration-300 flex flex-col"
             >
               {/* Icon */}
               <div className="w-14 h-14 bg-primary/10 rounded-2xl flex items-center justify-center mb-5 group-hover:bg-primary/20 transition-colors">
@@ -235,7 +235,7 @@ export default function Home() {
             {/* Card 2: HR Interview (Highlighted / Center) */}
             <Link
               href="/hr-interview"
-              className="group flex-1 max-w-sm lg:max-w-none lg:flex-[0_0_36%] bg-card border-2 border-primary/40 rounded-[20px] p-10 shadow-lg hover:shadow-2xl hover:-translate-y-3 transition-all duration-300 flex flex-col relative overflow-hidden"
+              className="group bg-card border-2 border-primary/40 rounded-[20px] p-8 shadow-lg hover:shadow-2xl hover:-translate-y-3 transition-all duration-300 flex flex-col relative overflow-hidden"
               style={{
                 boxShadow: '0 0 0 1px oklch(0.6 0.18 45 / 0.2), 0 8px 32px oklch(0.6 0.18 45 / 0.15)',
               }}
@@ -289,7 +289,7 @@ export default function Home() {
             {/* Card 3: Interview Types */}
             <Link
               href="/InterviewSelectionPage"
-              className="group flex-1 max-w-sm lg:max-w-none lg:flex-[0_0_28%] bg-card border border-border rounded-[20px] p-8 shadow-md hover:shadow-xl hover:-translate-y-2 transition-all duration-300 flex flex-col"
+              className="group bg-card border border-border rounded-[20px] p-8 shadow-md hover:shadow-xl hover:-translate-y-2 transition-all duration-300 flex flex-col"
             >
               {/* Icon */}
               <div className="w-14 h-14 bg-primary/10 rounded-2xl flex items-center justify-center mb-5 group-hover:bg-primary/20 transition-colors">
@@ -315,6 +315,42 @@ export default function Home() {
               <div className="mt-auto">
                 <span className="inline-flex items-center gap-2 px-5 py-2.5 bg-primary/10 text-primary font-semibold rounded-xl text-sm group-hover:bg-primary group-hover:text-primary-foreground transition-all duration-300">
                   Choose Round
+                  <svg className="w-4 h-4 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </span>
+              </div>
+            </Link>
+
+            {/* Card 4: Online Assessment */}
+            <Link
+              href="/assessment"
+              className="group bg-card border border-border rounded-[20px] p-8 shadow-md hover:shadow-xl hover:-translate-y-2 transition-all duration-300 flex flex-col"
+            >
+              {/* Icon */}
+              <div className="w-14 h-14 bg-primary/10 rounded-2xl flex items-center justify-center mb-5 group-hover:bg-primary/20 transition-colors">
+                <ClipboardCheck className="w-7 h-7 text-primary" />
+              </div>
+
+              {/* Tag */}
+              <span className="inline-block text-xs font-semibold tracking-widest uppercase text-primary bg-primary/10 rounded-full px-3 py-1 mb-4 w-fit">
+                Assessment
+              </span>
+
+              {/* Title */}
+              <h3 className="text-xl font-bold text-foreground mb-3">
+                Online Assessment
+              </h3>
+
+              {/* Description */}
+              <p className="text-muted-foreground text-sm leading-relaxed flex-1 mb-6">
+                Practice placement-style aptitude tests with timed assessments, instant scoring, and performance analytics.
+              </p>
+
+              {/* CTA */}
+              <div className="mt-auto">
+                <span className="inline-flex items-center gap-2 px-5 py-2.5 bg-primary/10 text-primary font-semibold rounded-xl text-sm group-hover:bg-primary group-hover:text-primary-foreground transition-all duration-300">
+                  Start Assessment
                   <svg className="w-4 h-4 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                   </svg>
