@@ -7,6 +7,10 @@ interface SubmitConfirmModalProps {
   answeredCount: number;
   onCancel: () => void;
   onConfirm: () => void;
+  /** True while a submission is in flight (API mode only) — disables both
+   * buttons and relabels the confirm button so it's clear something is
+   * happening rather than letting the user double-click or bail out. */
+  isSubmitting?: boolean;
 }
 
 export default function SubmitConfirmModal({
@@ -14,6 +18,7 @@ export default function SubmitConfirmModal({
   answeredCount,
   onCancel,
   onConfirm,
+  isSubmitting = false,
 }: SubmitConfirmModalProps) {
   const unanswered = totalQuestions - answeredCount;
 
@@ -82,15 +87,17 @@ export default function SubmitConfirmModal({
         <div className="flex items-center gap-3">
           <button
             onClick={onCancel}
-            className="flex-1 px-5 py-3 rounded-xl border border-border bg-card hover:bg-muted text-foreground font-medium text-sm transition-colors"
+            disabled={isSubmitting}
+            className="flex-1 px-5 py-3 rounded-xl border border-border bg-card hover:bg-muted text-foreground font-medium text-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           >
             Cancel
           </button>
           <button
             onClick={onConfirm}
-            className="flex-1 px-5 py-3 rounded-xl bg-gradient-to-r from-primary to-accent text-primary-foreground font-semibold text-sm shadow-lg shadow-primary/25 hover:shadow-primary/40 hover:scale-[1.02] transition-all duration-300"
+            disabled={isSubmitting}
+            className="flex-1 px-5 py-3 rounded-xl bg-gradient-to-r from-primary to-accent text-primary-foreground font-semibold text-sm shadow-lg shadow-primary/25 hover:shadow-primary/40 hover:scale-[1.02] transition-all duration-300 disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:scale-100"
           >
-            Submit Assessment
+            {isSubmitting ? "Submitting…" : "Submit Assessment"}
           </button>
         </div>
       </div>

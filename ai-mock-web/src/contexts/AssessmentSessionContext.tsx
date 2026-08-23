@@ -11,10 +11,24 @@ import React, {
 } from "react";
 import { useRouter } from "next/navigation";
 import { mockAptitudeQuestions } from "@/data/mockAptitudeQuestions";
-import type { AnswerMap, ShuffledAttemptQuestion } from "@/types/assessment";
+import {
+  startAssessmentAttempt,
+  submitAssessmentAttempt,
+  AssessmentApiError,
+} from "@/app/lib/assessmentApi";
+import type {
+  AnswerMap,
+  AssessmentResult,
+  AttemptQuestion,
+  Question,
+  ScorableQuestion,
+  ShuffledAttemptQuestion,
+} from "@/types/assessment";
 import {
   ASSESSMENT_DURATION_SECONDS,
+  ASSESSMENT_SOURCE,
   SESSION_STORAGE_KEY,
+  TOTAL_QUESTIONS,
 } from "@/constants/assessment";
 import { calculateScore } from "@/utils/calculateScore";
 
@@ -28,14 +42,47 @@ function shuffle<T>(input: T[]): T[] {
   return arr;
 }
 
-function buildAttemptOrder(): ShuffledAttemptQuestion[] {
-  return shuffle(mockAptitudeQuestions).map((question) => ({
+/** Normalizes a mock Question into the same shape API-sourced questions use,
+ * so the rest of the context/components never need to know which source a
+ * question came from. */
+function mockQuestionToAttemptQuestion(q: Question): AttemptQuestion {
+  return {
+    id: String(q.id),
+    question: q.question,
+    category: q.category,
+    difficulty: q.difficulty,
+    options: q.options.map((text, idx) => ({ id: String(idx), text })),
+    correctAnswer: q.correctAnswer,
+  };
+}
+
+interface LoadedAttempt {
+  /** Non-null only in API mode — the server-side attempt id needed to
+   * submit answers later. Mock mode never persists anything server-side. */
+  attemptId: string | null;
+  questions: AttemptQuestion[];
+}
+
+async function loadAttemptQuestions(): Promise<LoadedAttempt> {
+  if (ASSESSMENT_SOURCE === "api") {
+    const started = await startAssessmentAttempt({ questionCount: TOTAL_QUESTIONS });
+    return { attemptId: started.attemptId, questions: started.questions };
+  }
+  return {
+    attemptId: null,
+    questions: mockAptitudeQuestions.map(mockQuestionToAttemptQuestion),
+  };
+}
+
+function buildAttemptOrder(questions: AttemptQuestion[]): ShuffledAttemptQuestion[] {
+  return shuffle(questions).map((question) => ({
     question,
-    optionOrder: shuffle([0, 1, 2, 3]),
+    optionOrder: shuffle(question.options.map((_, i) => i)),
   }));
 }
 
 interface Attempt {
+  attemptId: string | null;
   order: ShuffledAttemptQuestion[];
   currentIndex: number;
   answers: AnswerMap;
@@ -44,8 +91,12 @@ interface Attempt {
   isFinalized: boolean;
 }
 
+type AttemptStatus = "idle" | "loading" | "ready" | "submitting" | "error";
+
 interface AssessmentSessionApi {
   attempt: Attempt | null;
+  attemptStatus: AttemptStatus;
+  attemptError: string | null;
   timeRemaining: number;
   startAttempt: () => void;
   selectAnswer: (originalOptionIndex: number) => void;
@@ -66,8 +117,14 @@ export function AssessmentSessionProvider({
 }) {
   const router = useRouter();
   const [attempt, setAttempt] = useState<Attempt | null>(null);
+  const [attemptStatus, setAttemptStatus] = useState<AttemptStatus>("idle");
+  const [attemptError, setAttemptError] = useState<string | null>(null);
   const [, setTick] = useState(0);
   const finalizingRef = useRef(false);
+  // Caps the timer-driven auto-submit-on-expiry to exactly one attempt, so a
+  // failed automatic submission doesn't retry every second forever — further
+  // attempts require the user to press the manual Retry banner.
+  const timeoutAutoSubmitAttemptedRef = useRef(false);
 
   // Mirrors `attempt` synchronously. Needed because finalizeAndSubmit can run
   // from a setInterval callback (outside React's event system), where a
@@ -80,22 +137,39 @@ export function AssessmentSessionProvider({
 
   const startAttempt = useCallback(() => {
     finalizingRef.current = false;
-    setAttempt({
-      order: buildAttemptOrder(),
-      currentIndex: 0,
-      answers: {},
-      visited: new Set([0]),
-      endAt: Date.now() + ASSESSMENT_DURATION_SECONDS * 1000,
-      isFinalized: false,
-    });
+    timeoutAutoSubmitAttemptedRef.current = false;
+    setAttempt(null);
+    setAttemptError(null);
+    setAttemptStatus("loading");
+
+    loadAttemptQuestions()
+      .then(({ attemptId, questions }) => {
+        setAttempt({
+          attemptId,
+          order: buildAttemptOrder(questions),
+          currentIndex: 0,
+          answers: {},
+          visited: new Set([0]),
+          endAt: Date.now() + ASSESSMENT_DURATION_SECONDS * 1000,
+          isFinalized: false,
+        });
+        setAttemptStatus("ready");
+      })
+      .catch((err) => {
+        setAttemptStatus("error");
+        setAttemptError(
+          err instanceof AssessmentApiError
+            ? err.message
+            : "Something went wrong while starting the assessment."
+        );
+      });
   }, []);
 
-  const finalizeAndSubmit = useCallback(() => {
+  const finalizeAndSubmit = useCallback(async () => {
     if (finalizingRef.current) return;
 
     const prev = attemptRef.current;
     if (!prev || prev.isFinalized) return;
-    finalizingRef.current = true;
 
     const timeTakenSeconds = Math.max(
       0,
@@ -103,16 +177,84 @@ export function AssessmentSessionProvider({
         Math.max(0, Math.ceil((prev.endAt - Date.now()) / 1000))
     );
     const questions = prev.order.map((o) => o.question);
-    const result = calculateScore(prev.answers, questions, timeTakenSeconds);
 
-    try {
-      sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(result));
-    } catch {
-      // sessionStorage unavailable — nothing else we can do client-side.
+    const persistAndNavigate = (result: AssessmentResult) => {
+      try {
+        sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(result));
+      } catch {
+        // sessionStorage unavailable — nothing else we can do client-side.
+      }
+      setAttempt((p) => (p ? { ...p, isFinalized: true } : p));
+      router.push("/assessment/result");
+    };
+
+    if (
+      questions.every(
+        (q): q is ScorableQuestion => q.correctAnswer !== undefined
+      )
+    ) {
+      // Mock mode — scoring happens client-side exactly as before, since the
+      // answer key is legitimately present on the question objects.
+      finalizingRef.current = true;
+      persistAndNavigate(calculateScore(prev.answers, questions, timeTakenSeconds));
+      return;
     }
 
-    setAttempt((p) => (p ? { ...p, isFinalized: true } : p));
-    router.push("/assessment/result");
+    // API mode — the client never knows the answer key, so scoring MUST
+    // happen server-side. Submit only the selected option per question.
+    if (!prev.attemptId) {
+      setAttemptStatus("error");
+      setAttemptError("This attempt can't be submitted (missing attempt id).");
+      return;
+    }
+
+    finalizingRef.current = true;
+    setAttemptStatus("submitting");
+    setAttemptError(null);
+
+    const answers = prev.order.map((entry, sessionIndex) => {
+      const selectedPosition = prev.answers[sessionIndex];
+      return {
+        questionId: entry.question.id,
+        selectedOptionId:
+          selectedPosition !== undefined
+            ? entry.question.options[selectedPosition].id
+            : null,
+      };
+    });
+
+    try {
+      const server = await submitAssessmentAttempt(
+        prev.attemptId,
+        answers,
+        timeTakenSeconds
+      );
+      const totalQuestions = questions.length;
+      const answeredCount = Object.keys(prev.answers).length;
+      persistAndNavigate({
+        totalQuestions,
+        correctAnswers: server.correctAnswers,
+        wrongAnswers: server.wrongAnswers,
+        answeredCount,
+        unansweredCount: server.unansweredAnswers,
+        accuracyRate: server.accuracyPercentage,
+        timeTakenSeconds: server.timeTakenSeconds,
+        scorePercentage: server.scorePercentage,
+        answers: prev.answers,
+        timestamp: new Date().toISOString(),
+        scoringUnavailable: false,
+      });
+    } catch (err) {
+      // Do NOT clear/finalize the attempt — answers stay intact so the user
+      // can retry without losing anything.
+      finalizingRef.current = false;
+      setAttemptStatus("error");
+      setAttemptError(
+        err instanceof AssessmentApiError
+          ? err.message
+          : "Failed to submit the assessment."
+      );
+    }
   }, [router]);
 
   const selectAnswer = useCallback((originalOptionIndex: number) => {
@@ -163,7 +305,10 @@ export function AssessmentSessionProvider({
     const interval = setInterval(() => {
       const remaining = Math.ceil((attempt.endAt - Date.now()) / 1000);
       if (remaining <= 0) {
-        finalizeAndSubmit();
+        if (!timeoutAutoSubmitAttemptedRef.current) {
+          timeoutAutoSubmitAttemptedRef.current = true;
+          finalizeAndSubmit();
+        }
       } else {
         setTick((t) => t + 1);
       }
@@ -185,6 +330,8 @@ export function AssessmentSessionProvider({
   const api = useMemo<AssessmentSessionApi>(
     () => ({
       attempt,
+      attemptStatus,
+      attemptError,
       timeRemaining,
       startAttempt,
       selectAnswer,
@@ -195,6 +342,8 @@ export function AssessmentSessionProvider({
     }),
     [
       attempt,
+      attemptStatus,
+      attemptError,
       timeRemaining,
       startAttempt,
       selectAnswer,

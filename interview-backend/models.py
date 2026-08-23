@@ -5,7 +5,7 @@ Defines User, InterviewSession, Question, and SoftSkillsMetric tables
 
 from datetime import datetime
 from typing import Optional, List
-from sqlalchemy import String, Integer, Float, Text, DateTime, ForeignKey, Boolean, JSON
+from sqlalchemy import String, Integer, Float, Text, DateTime, ForeignKey, Boolean, JSON, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from database import Base
 import uuid
@@ -174,3 +174,141 @@ class TokenUsage(Base):
     
     def __repr__(self):
         return f"<TokenUsage(session={self.session_id}, tokens={self.total_tokens})>"
+
+
+# =====================================================================
+# Online Assessment — Question Bank (V2 Phase 1)
+#
+# Namespaced as Assessment* to avoid colliding with the existing
+# `Question` model above, which represents an answered question within
+# an AI mock-interview InterviewSession (user_answer/score/feedback) —
+# a different concept from an aptitude question-bank entry.
+# =====================================================================
+
+class AssessmentCategory(Base):
+    """A topic/category for the Online Assessment question bank (e.g. Quantitative Aptitude)."""
+    __tablename__ = "assessment_categories"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid)
+    name: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+    slug: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    questions: Mapped[List["AssessmentQuestion"]] = relationship(
+        "AssessmentQuestion", back_populates="category", cascade="all, delete-orphan"
+    )
+
+    def __repr__(self):
+        return f"<AssessmentCategory(id={self.id}, name={self.name})>"
+
+
+class AssessmentQuestion(Base):
+    """A single question in the Online Assessment question bank."""
+    __tablename__ = "assessment_questions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid)
+    category_id: Mapped[str] = mapped_column(String(36), ForeignKey("assessment_categories.id"), nullable=False, index=True)
+    question_text: Mapped[str] = mapped_column(Text, nullable=False)
+    difficulty: Mapped[str] = mapped_column(String(20), nullable=False)  # "Easy" | "Medium" | "Hard"
+
+    # Stable seed identity (e.g. "mock-1".."mock-10") — lets the seed script
+    # be idempotent without guessing at question-text equality.
+    external_ref: Mapped[Optional[str]] = mapped_column(String(100), unique=True, nullable=True, index=True)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    category: Mapped["AssessmentCategory"] = relationship("AssessmentCategory", back_populates="questions")
+    options: Mapped[List["AssessmentQuestionOption"]] = relationship(
+        "AssessmentQuestionOption", back_populates="question", cascade="all, delete-orphan"
+    )
+
+    def __repr__(self):
+        return f"<AssessmentQuestion(id={self.id}, difficulty={self.difficulty})>"
+
+
+class AssessmentQuestionOption(Base):
+    """A single answer option for an AssessmentQuestion."""
+    __tablename__ = "assessment_question_options"
+    __table_args__ = (
+        UniqueConstraint("question_id", "option_index", name="uq_assessment_option_question_index"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid)
+    question_id: Mapped[str] = mapped_column(String(36), ForeignKey("assessment_questions.id"), nullable=False, index=True)
+    option_text: Mapped[str] = mapped_column(Text, nullable=False)
+    option_index: Mapped[int] = mapped_column(Integer, nullable=False)  # 0-3, seed-time order
+    is_correct: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+    question: Mapped["AssessmentQuestion"] = relationship("AssessmentQuestion", back_populates="options")
+
+    def __repr__(self):
+        return f"<AssessmentQuestionOption(question_id={self.question_id}, index={self.option_index}, correct={self.is_correct})>"
+
+
+# =====================================================================
+# Online Assessment — Attempt Tracking (V2.2)
+#
+# Introduced so scoring can happen server-side without ever exposing
+# is_correct to the client. An attempt is created (in_progress) at
+# /attempts/start with the exact question_ids selected, then scored and
+# closed out (submitted) at /attempts/submit. No history/listing endpoint
+# reads these back — they exist purely to make secure scoring possible.
+# =====================================================================
+
+class AssessmentAttempt(Base):
+    """A single (possibly in-progress) assessment attempt."""
+    __tablename__ = "assessment_attempts"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    submitted_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+    category_slug: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    difficulty: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    question_count: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    # The exact questions selected at start time — this is what makes
+    # ownership validation possible at submit time (a submitted question_id
+    # not in this list is rejected).
+    question_ids: Mapped[List[str]] = mapped_column(JSON, nullable=False, default=list)
+
+    total_questions: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    correct_answers: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    wrong_answers: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    unanswered_answers: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    score_percentage: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    accuracy_percentage: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    time_taken_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="in_progress")  # "in_progress" | "submitted"
+
+    answers: Mapped[List["AssessmentAttemptAnswer"]] = relationship(
+        "AssessmentAttemptAnswer", back_populates="attempt", cascade="all, delete-orphan"
+    )
+
+    def __repr__(self):
+        return f"<AssessmentAttempt(id={self.id}, status={self.status})>"
+
+
+class AssessmentAttemptAnswer(Base):
+    """One question's recorded answer (or lack thereof) within an attempt."""
+    __tablename__ = "assessment_attempt_answers"
+    __table_args__ = (
+        UniqueConstraint("attempt_id", "question_id", name="uq_attempt_answer_attempt_question"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid)
+    attempt_id: Mapped[str] = mapped_column(String(36), ForeignKey("assessment_attempts.id"), nullable=False, index=True)
+    question_id: Mapped[str] = mapped_column(String(36), ForeignKey("assessment_questions.id"), nullable=False, index=True)
+    selected_option_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+    is_correct: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+    attempt: Mapped["AssessmentAttempt"] = relationship("AssessmentAttempt", back_populates="answers")
+
+    def __repr__(self):
+        return f"<AssessmentAttemptAnswer(attempt_id={self.attempt_id}, question_id={self.question_id}, correct={self.is_correct})>"

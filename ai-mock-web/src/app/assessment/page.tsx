@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowLeft, Moon, Sun } from "lucide-react";
+import { ArrowLeft, History, Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
 import AssessmentCard from "@/components/assessment/AssessmentCard";
@@ -74,13 +74,22 @@ export default function AssessmentLandingPage() {
         <WhyAssessmentSection />
 
         {/* Section title */}
-        <div className="mb-8">
-          <h2 className="text-xl font-bold text-foreground mb-1">
-            Assessment Categories
-          </h2>
-          <p className="text-sm text-muted-foreground">
-            Choose an assessment to begin practicing.
-          </p>
+        <div className="mb-8 flex items-end justify-between gap-4 flex-wrap">
+          <div>
+            <h2 className="text-xl font-bold text-foreground mb-1">
+              Assessment Categories
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              Choose an assessment to begin practicing.
+            </p>
+          </div>
+          <Link
+            href="/assessment/history"
+            className="flex items-center gap-2 text-sm font-semibold text-primary hover:text-primary/80 transition-colors"
+          >
+            <History className="w-4 h-4" />
+            View History
+          </Link>
         </div>
 
         {/* Card grid — single card for V1 */}

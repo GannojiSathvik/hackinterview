@@ -1,9 +1,9 @@
 "use client";
 
-import type { Question } from "@/types/assessment";
+import type { AttemptQuestion } from "@/types/assessment";
 
 interface QuestionCardProps {
-  question: Question;
+  question: AttemptQuestion;
   questionIndex: number;
   totalQuestions: number;
   /** Original option indices (0-3), in the order they should be displayed. */
@@ -87,7 +87,7 @@ export default function QuestionCard({
                       : "text-muted-foreground group-hover:text-foreground"
                   }`}
                 >
-                  {question.options[originalIdx]}
+                  {question.options[originalIdx].text}
                 </span>
               </label>
             );

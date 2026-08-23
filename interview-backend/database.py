@@ -69,7 +69,11 @@ async def init_db():
     """Initialize database tables."""
     async with engine.begin() as conn:
         # Import models to register them with Base
-        from models import User, InterviewSession, Question, SoftSkillsMetric
+        from models import (
+            User, InterviewSession, Question, SoftSkillsMetric, TokenUsage,
+            AssessmentCategory, AssessmentQuestion, AssessmentQuestionOption,
+            AssessmentAttempt, AssessmentAttemptAnswer,
+        )
         
         logger.info("Creating database tables...")
         await conn.run_sync(Base.metadata.create_all)

@@ -3,19 +3,23 @@
  * Pure function — no side effects, no DOM access.
  */
 
-import type { AnswerMap, AssessmentResult, Question } from "@/types/assessment";
+import type { AnswerMap, AssessmentResult, ScorableQuestion } from "@/types/assessment";
 
 /**
  * Calculate the assessment result from the user's answers and the question set.
+ * Requires ScorableQuestion (correctAnswer guaranteed present) — only ever
+ * call this when every question in the attempt has an answer key. When it
+ * doesn't (API-mode questions), the caller must build an
+ * `scoringUnavailable: true` result directly instead of calling this.
  *
- * @param answers  Map of sessionQuestionIndex → selected (original, pre-shuffle) option index
+ * @param answers  Map of sessionQuestionIndex → selected (original, pre-shuffle) option position
  * @param questions  The full list of questions in the assessment, in session order
  * @param timeTakenSeconds  How long the attempt took, in seconds
  * @returns A complete AssessmentResult ready for sessionStorage
  */
 export function calculateScore(
   answers: AnswerMap,
-  questions: Question[],
+  questions: ScorableQuestion[],
   timeTakenSeconds: number
 ): AssessmentResult {
   const totalQuestions = questions.length;
@@ -47,5 +51,6 @@ export function calculateScore(
     scorePercentage,
     answers,
     timestamp: new Date().toISOString(),
+    scoringUnavailable: false,
   };
 }

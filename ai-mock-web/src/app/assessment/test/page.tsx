@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, ChevronRight, ListChecks } from "lucide-react";
+import Link from "next/link";
+import { ChevronLeft, ChevronRight, ListChecks, RotateCcw, AlertTriangle } from "lucide-react";
 import { useAssessmentSession } from "@/contexts/AssessmentSessionContext";
 
 import Timer from "@/components/assessment/Timer";
@@ -10,20 +11,32 @@ import ProgressBar from "@/components/assessment/ProgressBar";
 import QuestionCard from "@/components/assessment/QuestionCard";
 import QuestionPalette from "@/components/assessment/QuestionPalette";
 import ExitConfirmationModal from "@/components/assessment/ExitConfirmationModal";
+import SubmissionErrorBanner from "@/components/assessment/SubmissionErrorBanner";
 
 export default function AssessmentTestPage() {
   const router = useRouter();
-  const { attempt, timeRemaining, startAttempt, selectAnswer, goTo, next, prev } =
-    useAssessmentSession();
+  const {
+    attempt,
+    attemptStatus,
+    attemptError,
+    timeRemaining,
+    startAttempt,
+    selectAnswer,
+    goTo,
+    next,
+    prev,
+    finalizeAndSubmit,
+  } = useAssessmentSession();
   const [showExitModal, setShowExitModal] = useState(false);
 
-  // Start a fresh, shuffled attempt only if one isn't already in progress —
-  // this keeps returning from /assessment/review from reshuffling anything.
+  // Start a fresh, shuffled attempt only on first entry — this keeps
+  // returning from /assessment/review (or a completed/error attempt) from
+  // silently reshuffling or re-fetching anything.
   useEffect(() => {
-    if (!attempt) {
+    if (attemptStatus === "idle") {
       startAttempt();
     }
-  }, [attempt, startAttempt]);
+  }, [attemptStatus, startAttempt]);
 
   // Warn on tab close / refresh / external navigation while the attempt is active.
   useEffect(() => {
@@ -37,10 +50,50 @@ export default function AssessmentTestPage() {
     return () => window.removeEventListener("beforeunload", handler);
   }, [attempt]);
 
+  // A "couldn't start" error (no attempt exists yet) gets the full-page
+  // treatment. A submission failure (attempt already exists and is active)
+  // is shown as an inline banner further down instead — see isSubmitting/
+  // SubmissionErrorBanner below.
+  if (attemptStatus === "error" && !attempt) {
+    return (
+      <div className="min-h-screen flex items-center justify-center px-4">
+        <div className="max-w-md w-full bg-card border border-border rounded-2xl p-8 text-center shadow-md">
+          <div className="w-14 h-14 bg-red-500/10 rounded-2xl flex items-center justify-center mb-5 mx-auto">
+            <AlertTriangle className="w-7 h-7 text-red-500" />
+          </div>
+          <h2 className="text-lg font-bold text-foreground mb-2">
+            Couldn&apos;t start the assessment
+          </h2>
+          <p className="text-sm text-muted-foreground mb-6">
+            {attemptError || "Something went wrong. Please try again."}
+          </p>
+          <div className="flex items-center justify-center gap-3">
+            <Link
+              href="/assessment"
+              className="px-5 py-2.5 rounded-xl border border-border bg-card hover:bg-muted text-foreground font-medium text-sm transition-colors"
+            >
+              Back to Assessments
+            </Link>
+            <button
+              onClick={startAttempt}
+              className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-primary to-accent text-primary-foreground font-semibold text-sm shadow-lg shadow-primary/25 hover:shadow-primary/40 transition-all duration-300"
+            >
+              <RotateCcw className="w-4 h-4" />
+              Try Again
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (!attempt) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex flex-col items-center justify-center gap-4">
         <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+        {attemptStatus === "loading" && (
+          <p className="text-sm text-muted-foreground">Preparing your assessment…</p>
+        )}
       </div>
     );
   }
@@ -48,6 +101,7 @@ export default function AssessmentTestPage() {
   const { order, currentIndex, answers, visited } = attempt;
   const answeredCount = Object.keys(answers).length;
   const currentEntry = order[currentIndex];
+  const isSubmitting = attemptStatus === "submitting";
 
   const handleConfirmExit = () => {
     router.push("/assessment");
@@ -114,6 +168,12 @@ export default function AssessmentTestPage() {
             />
           </div>
         </div>
+
+        {attemptStatus === "error" && (
+          <div className="mt-6">
+            <SubmissionErrorBanner message={attemptError} onRetry={finalizeAndSubmit} />
+          </div>
+        )}
       </div>
 
       {/* ── Bottom Nav ──────────────────────────────────────── */}
@@ -146,10 +206,11 @@ export default function AssessmentTestPage() {
 
             <button
               onClick={handleReview}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-primary to-accent text-primary-foreground font-semibold text-sm shadow-lg shadow-primary/25 hover:shadow-primary/40 hover:scale-[1.02] transition-all duration-300"
+              disabled={isSubmitting}
+              className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-primary to-accent text-primary-foreground font-semibold text-sm shadow-lg shadow-primary/25 hover:shadow-primary/40 hover:scale-[1.02] transition-all duration-300 disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:scale-100"
             >
               <ListChecks className="w-4 h-4" />
-              Review Answers
+              {isSubmitting ? "Submitting…" : "Review Answers"}
             </button>
           </div>
         </div>

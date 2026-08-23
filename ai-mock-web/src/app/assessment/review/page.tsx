@@ -8,12 +8,14 @@ import { useAssessmentSession } from "@/contexts/AssessmentSessionContext";
 import Timer from "@/components/assessment/Timer";
 import ReviewQuestionGrid from "@/components/assessment/ReviewQuestionGrid";
 import SubmitConfirmModal from "@/components/assessment/SubmitConfirmModal";
+import SubmissionErrorBanner from "@/components/assessment/SubmissionErrorBanner";
 
 export default function AssessmentReviewPage() {
   const router = useRouter();
-  const { attempt, timeRemaining, goTo, finalizeAndSubmit } =
+  const { attempt, attemptStatus, attemptError, timeRemaining, goTo, finalizeAndSubmit } =
     useAssessmentSession();
   const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const isSubmitting = attemptStatus === "submitting";
 
   // Route guard: no in-progress attempt to review, or it's already finalized.
   useEffect(() => {
@@ -23,6 +25,15 @@ export default function AssessmentReviewPage() {
       router.replace("/assessment/result");
     }
   }, [attempt, router]);
+
+  // If a submission fails, close the confirm modal so the page-level error
+  // banner (with its own Retry) is the one place to recover from — avoids
+  // showing a modal and a banner at the same time.
+  useEffect(() => {
+    if (attemptStatus === "error") {
+      setShowConfirmModal(false);
+    }
+  }, [attemptStatus]);
 
   if (!attempt || attempt.isFinalized) {
     return (
@@ -110,6 +121,10 @@ export default function AssessmentReviewPage() {
           answers={answers}
           onJumpTo={handleJumpTo}
         />
+
+        {attemptStatus === "error" && (
+          <SubmissionErrorBanner message={attemptError} onRetry={finalizeAndSubmit} />
+        )}
       </div>
 
       {/* ── Bottom Nav ──────────────────────────────────────── */}
@@ -125,10 +140,11 @@ export default function AssessmentReviewPage() {
 
           <button
             onClick={() => setShowConfirmModal(true)}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-primary to-accent text-primary-foreground font-semibold text-sm shadow-lg shadow-primary/25 hover:shadow-primary/40 hover:scale-[1.02] transition-all duration-300"
+            disabled={isSubmitting}
+            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-primary to-accent text-primary-foreground font-semibold text-sm shadow-lg shadow-primary/25 hover:shadow-primary/40 hover:scale-[1.02] transition-all duration-300 disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:scale-100"
           >
             <Send className="w-4 h-4" />
-            Submit Final Assessment
+            {isSubmitting ? "Submitting…" : "Submit Final Assessment"}
           </button>
         </div>
       </footer>
@@ -140,6 +156,7 @@ export default function AssessmentReviewPage() {
           answeredCount={answeredCount}
           onCancel={() => setShowConfirmModal(false)}
           onConfirm={finalizeAndSubmit}
+          isSubmitting={isSubmitting}
         />
       )}
     </div>

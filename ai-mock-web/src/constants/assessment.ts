@@ -3,7 +3,15 @@
  * All magic numbers and reusable values extracted here.
  */
 
-import type { PerformanceLevel } from "@/types/assessment";
+import type { AssessmentSource, PerformanceLevel } from "@/types/assessment";
+
+/**
+ * Assessment question source. Defaults to "mock" on any unset/invalid
+ * value, so V1.1's existing behavior is unaffected unless a developer
+ * explicitly opts in to "api".
+ */
+export const ASSESSMENT_SOURCE: AssessmentSource =
+  process.env.NEXT_PUBLIC_ASSESSMENT_SOURCE === "api" ? "api" : "mock";
 
 /** Assessment duration in minutes */
 export const ASSESSMENT_DURATION_MINUTES = 15;

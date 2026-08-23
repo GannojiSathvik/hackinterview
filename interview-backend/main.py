@@ -68,6 +68,7 @@ from routes.vision import router as vision_router
 from routes.avatar import router as avatar_router
 from routes.tokens import router as tokens_router
 from routes.posture import router as posture_router
+from routes.assessment import router as assessment_router
 
 app.include_router(auth_router)
 app.include_router(interview_router)
@@ -77,6 +78,7 @@ app.include_router(vision_router)
 app.include_router(avatar_router)
 app.include_router(tokens_router)
 app.include_router(posture_router)
+app.include_router(assessment_router)
 
 # -------------------------------------------------------------------
 # Health-check

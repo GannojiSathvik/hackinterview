@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { RotateCcw, Home, Moon, Sun } from "lucide-react";
+import { RotateCcw, Home, Moon, Sun, Info } from "lucide-react";
 import { useTheme } from "next-themes";
 import type { AssessmentResult } from "@/types/assessment";
 import { SESSION_STORAGE_KEY } from "@/constants/assessment";
@@ -102,13 +102,32 @@ export default function AssessmentResultPage() {
           </p>
         </div>
 
-        {/* Result Summary */}
-        <ResultSummary result={result} />
+        {result.scoringUnavailable ? (
+          <div className="bg-card border border-border rounded-2xl p-8 shadow-md text-center">
+            <div className="w-14 h-14 bg-primary/10 rounded-2xl flex items-center justify-center mb-5 mx-auto">
+              <Info className="w-7 h-7 text-primary" />
+            </div>
+            <h2 className="text-lg font-bold text-foreground mb-2">
+              Score Unavailable
+            </h2>
+            <p className="text-sm text-muted-foreground max-w-sm mx-auto">
+              This assessment was served from the live question bank, which
+              doesn&apos;t support secure scoring yet. Your answers were
+              recorded, but a score can&apos;t be computed without exposing
+              the answer key to the browser.
+            </p>
+          </div>
+        ) : (
+          <>
+            {/* Result Summary */}
+            <ResultSummary result={result} />
 
-        {/* V1.1 additions */}
-        <PerformanceSummary scorePercentage={result.scorePercentage} />
-        <RecommendationList scorePercentage={result.scorePercentage} />
-        <AssessmentStatistics result={result} />
+            {/* V1.1 additions */}
+            <PerformanceSummary scorePercentage={result.scorePercentage} />
+            <RecommendationList scorePercentage={result.scorePercentage} />
+            <AssessmentStatistics result={result} />
+          </>
+        )}
 
         {/* Action buttons */}
         <div className="flex flex-col sm:flex-row items-center gap-4 mt-10">
