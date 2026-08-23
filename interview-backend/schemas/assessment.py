@@ -1,7 +1,7 @@
 """Online Assessment question-bank Pydantic models (read-only, Phase 1)."""
 from datetime import datetime
 from typing import List, Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 
 class CategoryOut(BaseModel):
@@ -138,3 +138,100 @@ class CategoryPerformanceItem(BaseModel):
 class ScoreTrendPoint(BaseModel):
     attempt_number: int
     score: float
+
+
+# =====================================================================
+# Admin Question-Bank Management (V2.4) — every schema here is only ever
+# reachable through routes/admin_assessment.py, which require_admin() gates.
+# Unlike the candidate-facing schemas above, these deliberately DO include
+# is_correct/is_active: an admin managing the bank must see the answer key.
+# =====================================================================
+
+_VALID_DIFFICULTIES = ("Easy", "Medium", "Hard")
+
+
+class QuestionOptionAdminIn(BaseModel):
+    """One answer option supplied by an admin when creating/editing a question."""
+    option_text: str
+    is_correct: bool
+
+    @field_validator("option_text")
+    @classmethod
+    def _non_empty(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("option_text must not be empty")
+        return v
+
+
+class QuestionCreate(BaseModel):
+    """Admin request to create a question. Exactly 4 options and exactly 1
+    correct option are required — enforced here so an invalid question can
+    never reach the database."""
+    question_text: str
+    category_id: str
+    difficulty: str
+    options: List[QuestionOptionAdminIn]
+
+    @field_validator("question_text")
+    @classmethod
+    def _non_empty_text(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("question_text must not be empty")
+        return v
+
+    @field_validator("difficulty")
+    @classmethod
+    def _valid_difficulty(cls, v: str) -> str:
+        if v not in _VALID_DIFFICULTIES:
+            raise ValueError(f"difficulty must be one of: {', '.join(_VALID_DIFFICULTIES)}")
+        return v
+
+    @field_validator("options")
+    @classmethod
+    def _exactly_four_one_correct(
+        cls, v: List[QuestionOptionAdminIn]
+    ) -> List[QuestionOptionAdminIn]:
+        if len(v) != 4:
+            raise ValueError("a question must have exactly 4 options")
+        if sum(1 for o in v if o.is_correct) != 1:
+            raise ValueError("a question must have exactly 1 correct option")
+        return v
+
+
+class QuestionUpdate(QuestionCreate):
+    """Admin request to fully replace a question's text/category/difficulty/options."""
+    pass
+
+
+class QuestionOptionAdminOut(BaseModel):
+    """An answer option as seen by an admin — includes is_correct, unlike
+    the candidate-facing QuestionOptionOut."""
+    id: str
+    option_text: str
+    option_index: int
+    is_correct: bool
+
+
+class QuestionAdminOut(BaseModel):
+    """A question-bank entry as seen by an admin — includes is_correct and
+    is_active, unlike the candidate-facing QuestionOut."""
+    id: str
+    question_text: str
+    difficulty: str
+    is_active: bool
+    category: CategoryOut
+    options: List[QuestionOptionAdminOut]
+
+
+class QuestionListResponse(BaseModel):
+    questions: List[QuestionAdminOut]
+    total: int
+
+
+class CategoryAdminOut(BaseModel):
+    """A question-bank category as seen by an admin (populates the
+    category filter/select in the admin UI)."""
+    id: str
+    name: str
+    slug: str
+    description: Optional[str] = None

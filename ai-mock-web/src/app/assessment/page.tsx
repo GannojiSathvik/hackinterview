@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowLeft, History, Moon, Sun } from "lucide-react";
+import { ArrowLeft, History, Moon, ShieldCheck, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
 import AssessmentCard from "@/components/assessment/AssessmentCard";
@@ -9,11 +9,16 @@ import WhyAssessmentSection from "@/components/assessment/WhyAssessmentSection";
 
 export default function AssessmentLandingPage() {
   const [mounted, setMounted] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
   const { theme, setTheme } = useTheme();
   const isDark = theme === "dark";
 
   useEffect(() => {
     setMounted(true);
+    fetch("/api/admin/whoami")
+      .then((res) => res.json())
+      .then((data) => setIsAdmin(!!data?.isAdmin))
+      .catch(() => setIsAdmin(false));
   }, []);
 
   if (!mounted) return null;
@@ -83,13 +88,24 @@ export default function AssessmentLandingPage() {
               Choose an assessment to begin practicing.
             </p>
           </div>
-          <Link
-            href="/assessment/history"
-            className="flex items-center gap-2 text-sm font-semibold text-primary hover:text-primary/80 transition-colors"
-          >
-            <History className="w-4 h-4" />
-            View History
-          </Link>
+          <div className="flex items-center gap-5">
+            {isAdmin && (
+              <Link
+                href="/admin/assessment/questions"
+                className="flex items-center gap-2 text-sm font-semibold text-foreground/80 hover:text-primary transition-colors"
+              >
+                <ShieldCheck className="w-4 h-4" />
+                Manage Questions
+              </Link>
+            )}
+            <Link
+              href="/assessment/history"
+              className="flex items-center gap-2 text-sm font-semibold text-primary hover:text-primary/80 transition-colors"
+            >
+              <History className="w-4 h-4" />
+              View History
+            </Link>
+          </div>
         </div>
 
         {/* Card grid — single card for V1 */}

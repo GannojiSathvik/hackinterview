@@ -93,7 +93,7 @@ async def list_assessment_questions(
     stmt = select(AssessmentQuestion).options(
         selectinload(AssessmentQuestion.category),
         selectinload(AssessmentQuestion.options),
-    )
+    ).where(AssessmentQuestion.is_active.is_(True))
 
     if category:
         stmt = stmt.where(AssessmentQuestion.category.has(slug=category))

@@ -218,6 +218,10 @@ class AssessmentQuestion(Base):
     # be idempotent without guessing at question-text equality.
     external_ref: Mapped[Optional[str]] = mapped_column(String(100), unique=True, nullable=True, index=True)
 
+    # V2.4: soft-disable instead of hard delete when a question has been
+    # used in attempt history — see AssessmentAttemptAnswer's FK.
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

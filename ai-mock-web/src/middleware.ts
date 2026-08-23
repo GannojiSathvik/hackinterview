@@ -14,8 +14,11 @@ export default async function middleware(req: NextRequest) {
     // Define protected routes that require authentication
     const protectedRoutes = [
         "/resume",
+        "/resume-analyzer",
+        "/hr-interview",
         "/Interview",
         "/InterviewSelectionPage",
+        "/assessment",
         "/dashboard",
     ];
 
@@ -25,8 +28,7 @@ export default async function middleware(req: NextRequest) {
     );
 
     // If trying to access a protected route without being logged in
-    // BYPASS LOGIN FOR NOW
-    if (false && isProtectedRoute && !isLoggedIn) {
+    if (isProtectedRoute && !isLoggedIn) {
         // Store the original URL to redirect back after login
         const callbackUrl = encodeURIComponent(nextUrl.pathname + nextUrl.search);
         return NextResponse.redirect(

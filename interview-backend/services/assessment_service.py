@@ -106,10 +106,12 @@ async def select_random_questions(
     if difficulty is not None and difficulty not in VALID_DIFFICULTIES:
         raise InvalidDifficultyError(difficulty)
 
+    # V2.4: admin-disabled questions must never be selected into a new
+    # attempt — applied unconditionally, not just when a filter is given.
     stmt = select(AssessmentQuestion).options(
         selectinload(AssessmentQuestion.category),
         selectinload(AssessmentQuestion.options),
-    )
+    ).where(AssessmentQuestion.is_active.is_(True))
 
     if category_slug is not None:
         category_result = await db.execute(
@@ -130,7 +132,11 @@ async def select_random_questions(
     if len(questions) < count:
         # Re-count without the LIMIT to report how many actually exist for
         # this filter, so the error message is genuinely useful.
-        count_stmt = select(func.count()).select_from(AssessmentQuestion)
+        count_stmt = (
+            select(func.count())
+            .select_from(AssessmentQuestion)
+            .where(AssessmentQuestion.is_active.is_(True))
+        )
         if category_slug is not None:
             count_stmt = count_stmt.where(AssessmentQuestion.category.has(slug=category_slug))
         if difficulty is not None:
