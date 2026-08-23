@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import Link from "next/link"
 import { Moon, Sun, Zap, Award, Shield, FileText, Sparkles, Mic, Layers, ClipboardCheck } from "lucide-react"
 import { useTheme } from "next-themes"
+import UserMenu from "@/components/UserMenu"
 
 export default function Home() {
   const [mounted, setMounted] = useState(false)
@@ -91,6 +92,7 @@ export default function Home() {
                 <Moon className="w-5 h-5 text-foreground/80" />
               )}
             </button>
+            <UserMenu />
           </div>
         </div>
       </nav>

@@ -35,6 +35,13 @@ SAFETY_SETTINGS = [
 # Initialize the Gemini model
 model = genai.GenerativeModel('gemini-2.5-flash', safety_settings=SAFETY_SETTINGS)
 
+# New (non-deprecated) SDK client — used only by
+# GeminiService.generate_interview_plan() for Grounding with Google Search,
+# which the deprecated `google.generativeai` package above does not support.
+# Every other Gemini call in this app still goes through `model` above.
+from google import genai as _google_genai
+GENAI_CLIENT = _google_genai.Client(api_key=API_KEY)
+
 # Static file directories
 BASE_DIR = os.path.dirname(__file__)
 STATIC_DIR = os.path.join(BASE_DIR, "static")

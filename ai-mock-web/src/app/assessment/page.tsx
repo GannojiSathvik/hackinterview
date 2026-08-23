@@ -6,6 +6,7 @@ import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
 import AssessmentCard from "@/components/assessment/AssessmentCard";
 import WhyAssessmentSection from "@/components/assessment/WhyAssessmentSection";
+import UserMenu from "@/components/UserMenu";
 
 export default function AssessmentLandingPage() {
   const [mounted, setMounted] = useState(false);
@@ -58,6 +59,7 @@ export default function AssessmentLandingPage() {
                 <Moon className="w-5 h-5 text-foreground/80" />
               )}
             </button>
+            <UserMenu />
           </div>
         </div>
       </nav>

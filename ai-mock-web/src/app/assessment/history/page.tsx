@@ -25,6 +25,7 @@ import AssessmentStatisticsCards from "@/components/assessment/AssessmentStatist
 import AssessmentTrendChart from "@/components/assessment/AssessmentTrendChart";
 import AssessmentHistoryTable from "@/components/assessment/AssessmentHistoryTable";
 import AttemptDetailsModal from "@/components/assessment/AttemptDetailsModal";
+import UserMenu from "@/components/UserMenu";
 
 type PageStatus = "loading" | "ready" | "error";
 
@@ -130,6 +131,7 @@ export default function AssessmentHistoryPage() {
                 <Moon className="w-5 h-5 text-foreground/80" />
               )}
             </button>
+            <UserMenu />
           </div>
         </div>
       </nav>

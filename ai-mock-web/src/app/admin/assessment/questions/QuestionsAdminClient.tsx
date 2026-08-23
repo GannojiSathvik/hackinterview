@@ -22,6 +22,7 @@ import QuestionFilters, {
 import QuestionTable from "@/components/admin-assessment/QuestionTable";
 import QuestionFormModal from "@/components/admin-assessment/QuestionFormModal";
 import DeleteQuestionModal from "@/components/admin-assessment/DeleteQuestionModal";
+import UserMenu from "@/components/UserMenu";
 
 type PageStatus = "loading" | "ready" | "error";
 
@@ -147,12 +148,15 @@ export default function QuestionsAdminClient() {
               HackInterview
             </span>
           </Link>
-          <Link
-            href="/dashboard"
-            className="text-sm text-foreground/80 hover:text-primary transition-colors"
-          >
-            Dashboard
-          </Link>
+          <div className="flex items-center gap-4">
+            <Link
+              href="/dashboard"
+              className="text-sm text-foreground/80 hover:text-primary transition-colors"
+            >
+              Dashboard
+            </Link>
+            <UserMenu />
+          </div>
         </div>
       </nav>
 

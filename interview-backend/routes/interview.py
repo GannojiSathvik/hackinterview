@@ -40,7 +40,7 @@ async def start_interview(
     jobRole: str = Form(...),
     companyName: str = Form(...)
 ):
-    if not all([yearsOfExperience, jobRole, companyName]):
+    if not jobRole or not companyName:
         raise HTTPException(status_code=400, detail="Missing required form data.")
 
     effective_role = jobRole
@@ -158,7 +158,8 @@ async def submit_answer(answer_data: InterviewAnswer):
             job_role=session["job_role"],
             years_of_experience=session["years_of_experience"],
             company_name=session["company_name"],
-            round_title=current_round["title"]
+            round_title=current_round["title"],
+            round_type=current_round["type"]
         )
         question_to_feedback = q_data.question
     elif current_round["type"] == "mcq":
@@ -169,7 +170,8 @@ async def submit_answer(answer_data: InterviewAnswer):
             job_role=session["job_role"],
             years_of_experience=session["years_of_experience"],
             company_name=session["company_name"],
-            round_title=current_round["title"]
+            round_title=current_round["title"],
+            round_type=current_round["type"]
         )
         question_to_feedback = q_data.question
 

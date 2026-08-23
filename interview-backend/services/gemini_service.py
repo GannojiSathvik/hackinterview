@@ -9,8 +9,9 @@ import random
 from typing import List, Dict, Any, Optional, Union
 
 import google.generativeai as genai
+from google.genai import types as genai_types
 
-from config import model, logger
+from config import model, logger, GENAI_CLIENT
 from services.token_tracker import token_tracker
 from schemas.interview import (
     QuestionResponse, CodingQuestionResponse, MCQQuestionResponse,
@@ -18,6 +19,18 @@ from schemas.interview import (
 )
 from schemas.resume import ATSReviewResponse
 from schemas.voice import SoftSkillMetric, SoftSkillsFeedback
+
+# ------------------------------------------------------------------
+# Grounded round-context cache (used by generate_question and
+# generate_coding_question below). One grounded search per
+# (company, role, round_type) is shared across every question in that
+# round AND across every user/session that hits the same combination —
+# not one grounded call per question, which would multiply search-request
+# volume by the number of questions per interview. In-memory + TTL, same
+# style as the rest of this app's session state (services/session_manager.py).
+# ------------------------------------------------------------------
+_ROUND_CONTEXT_CACHE: Dict[str, tuple[float, str]] = {}
+_ROUND_CONTEXT_TTL_SECONDS = 24 * 60 * 60
 
 
 class GeminiService:
@@ -32,7 +45,91 @@ class GeminiService:
     # Interview plan generation
     # ------------------------------------------------------------------
     @staticmethod
+    async def _generate_grounded_interview_plan(
+        company_name: str, job_role: str, years_of_experience: int
+    ) -> List[Dict[str, Any]]:
+        """Attempt a plan grounded in live Google Search results (real,
+        current interview-process info for this company/role), via the
+        non-deprecated google-genai SDK. Raises on any failure — callers
+        must fall back to the plain (ungrounded) prompt below."""
+        nonce = uuid.uuid4().hex[:8]
+        prompt = f"""Search for current, real information about the interview process for
+{job_role} at {company_name} with {years_of_experience} years of experience — round
+structure, what each round covers, and typical duration.
+
+Using what you find, create an interview plan.
+
+Guidelines:
+- Senior (6+ YOE): 6-8 rounds
+- Mid-level (3-5 YOE): 5-6 rounds
+- Junior (0-2 YOE): 3-5 rounds
+
+Respond with ONLY a JSON array (no prose, no markdown fences, no citations) in this format:
+[
+  {{"title": "Round Name", "type": "behavioral", "question_count": 2, "estimated_minutes": 30}},
+  {{"title": "Coding Round", "type": "dsa", "question_count": 2, "estimated_minutes": 45}}
+]
+
+Types: behavioral, technical, dsa, mcq
+Token: {nonce}"""
+
+        response = GENAI_CLIENT.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=prompt,
+            config=genai_types.GenerateContentConfig(
+                temperature=0.7,
+                max_output_tokens=8192,
+                tools=[genai_types.Tool(google_search=genai_types.GoogleSearch())],
+            ),
+        )
+        token_tracker.track(response)
+        raw = (response.text or "").strip()
+
+        start = raw.find('[')
+        end = raw.rfind(']') + 1
+        if start < 0 or end <= start:
+            raise ValueError("No JSON array found in grounded response")
+        return json.loads(raw[start:end])
+
+    @staticmethod
     async def generate_interview_plan(company_name: str, job_role: str, years_of_experience: int) -> tuple[List[Dict[str, Any]], bool, str]:
+        grounded_plan: Optional[List[Dict[str, Any]]] = None
+        try:
+            grounded_plan = await GeminiService._generate_grounded_interview_plan(
+                company_name, job_role, years_of_experience
+            )
+        except Exception as e:
+            logger.warning(f"Grounded interview-plan generation failed, falling back: {e}")
+
+        if grounded_plan is not None:
+            plan = grounded_plan
+            for r in plan:
+                raw_type = (r.get("type") or "").lower()
+                if "system" in raw_type or "design" in raw_type:
+                    r["type"] = "technical"
+                elif "dsa" in raw_type or "coding" in raw_type or "algorithm" in raw_type:
+                    r["type"] = "dsa"
+                elif "mcq" in raw_type or "assessment" in raw_type:
+                    r["type"] = "mcq"
+                elif "|" in raw_type:
+                    r["type"] = "behavioral"
+                elif raw_type in ["behavioral", "technical", "dsa", "mcq"]:
+                    r["type"] = raw_type
+                else:
+                    r["type"] = "behavioral"
+
+                if "estimated_minutes" not in r or not isinstance(r.get("estimated_minutes"), int):
+                    q = int(r.get("question_count", 1) or 1)
+                    t = r["type"]
+                    if t in ["technical", "dsa"]:
+                        r["estimated_minutes"] = max(20, q * 25)
+                    elif t == "mcq":
+                        r["estimated_minutes"] = max(10, q * 2)
+                    else:
+                        r["estimated_minutes"] = max(10, q * 8)
+
+            return plan, True, f"AI-generated plan grounded in live Google Search results for {company_name} {job_role} with {years_of_experience} years experience"
+
         try:
             nonce = uuid.uuid4().hex[:8]
             simple_prompt = f"""Create an interview plan for {job_role} at {company_name} with {years_of_experience} years experience.
@@ -169,27 +266,77 @@ Vary rounds based on company culture. Token: {nonce}"""
             return base, False, f"Enhanced fallback plan for {company_name} {job_role} ({years_of_experience} YOE) - AI temporarily unavailable"
 
     # ------------------------------------------------------------------
+    # Grounded round context — one search per (company, role, round_type),
+    # cached and shared across every question in the round and across
+    # every session that hits the same combination. Returns "" (never
+    # raises) so callers can proceed with the plain prompt if grounding
+    # is unavailable or fails.
+    # ------------------------------------------------------------------
+    @staticmethod
+    async def _get_grounded_round_context(company_name: str, job_role: str, round_type: str) -> str:
+        cache_key = f"{company_name.strip().lower()}|{job_role.strip().lower()}|{round_type}"
+        cached = _ROUND_CONTEXT_CACHE.get(cache_key)
+        if cached and (time.time() - cached[0]) < _ROUND_CONTEXT_TTL_SECONDS:
+            return cached[1]
+
+        try:
+            kind = "coding/technical" if round_type in ("technical", "dsa") else "behavioral"
+            prompt = f"""Search for real, current information about {kind} interview questions that
+{company_name} actually asks {job_role} candidates.
+
+Summarize in 3-5 short bullet points: specific topics, question styles, and any known
+real examples. Be concrete, not generic. If you find nothing specific to {company_name},
+say so in one line instead of inventing details."""
+
+            response = GENAI_CLIENT.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=prompt,
+                config=genai_types.GenerateContentConfig(
+                    temperature=0.3,
+                    max_output_tokens=600,
+                    tools=[genai_types.Tool(google_search=genai_types.GoogleSearch())],
+                ),
+            )
+            token_tracker.track(response)
+            context = (response.text or "").strip()
+            _ROUND_CONTEXT_CACHE[cache_key] = (time.time(), context)
+            return context
+        except Exception as e:
+            logger.warning(f"Grounded round-context lookup failed for {cache_key!r}, continuing without it: {e}")
+            return ""
+
+    # ------------------------------------------------------------------
     # Question generation
     # ------------------------------------------------------------------
     @staticmethod
-    async def generate_question(job_role: str, years_of_experience: int, company_name: str, round_title: str) -> QuestionResponse:
+    async def generate_question(
+        job_role: str, years_of_experience: int, company_name: str, round_title: str, round_type: str = "behavioral"
+    ) -> QuestionResponse:
         try:
+            grounded_context = await GeminiService._get_grounded_round_context(company_name, job_role, round_type)
+            context_block = (
+                f"\n            Real interview context found via search:\n            {grounded_context}\n"
+                if grounded_context
+                else ""
+            )
+
             nonce = f"{int(time.time())}-{uuid.uuid4().hex[:8]}"
             prompt = f"""
             You are conducting a '{round_title}' interview for {job_role} at {company_name} ({years_of_experience} YOE).
-            
+            {context_block}
             Create ONE unique behavioral question. Company focus:
             - Amazon: Leadership Principles (Ownership, Customer Obsession, Dive Deep, etc.)
             - Google: Collaboration, innovation, problem-solving, Googleyness
             - Microsoft: Growth mindset, inclusive leadership, customer focus
             - Meta: Move fast, be bold, build for impact
-            
+
             Experience level:
             - Junior (0-2): Learning, feedback, basic teamwork
-            - Mid (3-5): Leadership, mentoring, technical decisions  
+            - Mid (3-5): Leadership, mentoring, technical decisions
             - Senior (6+): Strategy, cross-team impact, driving results
-            
-            Make it specific and unique. Avoid generic questions. Token: {nonce}
+
+            Use the real interview context above where relevant, but stay specific and unique.
+            Avoid generic questions. Token: {nonce}
             Return only the question text.
             """
             response = model.generate_content(
@@ -228,12 +375,21 @@ Vary rounds based on company culture. Token: {nonce}"""
     # Coding question generation
     # ------------------------------------------------------------------
     @staticmethod
-    async def generate_coding_question(job_role: str, years_of_experience: int, company_name: str, round_title: str) -> CodingQuestionResponse:
+    async def generate_coding_question(
+        job_role: str, years_of_experience: int, company_name: str, round_title: str, round_type: str = "dsa"
+    ) -> CodingQuestionResponse:
         try:
+            grounded_context = await GeminiService._get_grounded_round_context(company_name, job_role, round_type)
+            context_block = (
+                f"\n            Real interview context found via search:\n            {grounded_context}\n"
+                if grounded_context
+                else ""
+            )
+
             nonce = f"{int(time.time())}-{uuid.uuid4().hex[:6]}"
             prompt = f"""
             Create a unique coding problem for {job_role} at {company_name} ({years_of_experience} YOE).
-            
+            {context_block}
             Difficulty by experience:
             - Junior (0-2): Arrays, strings, basic loops
             - Mid (3-5): Trees, graphs, dynamic programming
@@ -758,7 +914,8 @@ async def get_next_question_data(session: Dict[str, Any], next_round_info: Dict[
             job_role=session["job_role"],
             years_of_experience=session["years_of_experience"],
             company_name=session["company_name"],
-            round_title=next_round_info["title"]
+            round_title=next_round_info["title"],
+            round_type=next_round_info["type"]
         )
     elif next_round_info["type"] == "mcq":
         return await GeminiService.generate_mcq_questions(session["job_role"])
@@ -767,5 +924,6 @@ async def get_next_question_data(session: Dict[str, Any], next_round_info: Dict[
             job_role=session["job_role"],
             years_of_experience=session["years_of_experience"],
             company_name=session["company_name"],
-            round_title=next_round_info["title"]
+            round_title=next_round_info["title"],
+            round_type=next_round_info["type"]
         )

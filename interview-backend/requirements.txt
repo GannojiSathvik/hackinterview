@@ -13,6 +13,10 @@ psycopg2-binary>=2.9.9
 
 # AI/ML
 google-generativeai>=0.7.0
+# New (non-deprecated) SDK — used only for Grounding with Google Search in
+# GeminiService.generate_interview_plan(); google-generativeai above is
+# still used for every other Gemini call and is kept as-is.
+google-genai>=1.0.0
 
 # Document parsing
 PyPDF2>=3.0.1
