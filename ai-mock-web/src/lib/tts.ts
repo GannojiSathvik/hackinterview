@@ -24,8 +24,16 @@ export async function speak(text: string, options: TTSOptions = {}): Promise<voi
     if (contentType.includes("audio/mpeg") || contentType.includes("audio/")) {
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
-      const audio = new Audio(url);
-      await audio.play();
+      try {
+        await new Promise<void>((resolve, reject) => {
+          const audio = new Audio(url);
+          audio.onended = () => resolve();
+          audio.onerror = () => reject(new Error("audio playback failed"));
+          audio.play().catch(reject);
+        });
+      } finally {
+        URL.revokeObjectURL(url);
+      }
       return;
     }
 
@@ -37,7 +45,7 @@ export async function speak(text: string, options: TTSOptions = {}): Promise<voi
 
     // Unknown response – fallback
     return speakClient(text, options);
-  } catch (e) {
+  } catch {
     // Network or other error – fallback
     return speakClient(text, options);
   }
