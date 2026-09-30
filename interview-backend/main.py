@@ -18,10 +18,16 @@ from config import logger, STATIC_DIR, STATIC_OUTPUT_DIR
 # -------------------------------------------------------------------
 app = FastAPI(title="HackInterview API")
 
-# CORS
+# CORS — only the frontend's origin(s) may call the API from a browser.
+# Comma-separated list, e.g. CORS_ORIGINS=http://localhost:3000,https://app.example.com
+CORS_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",")
+    if origin.strip()
+]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
