@@ -14,9 +14,10 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     ],
     callbacks: {
         async jwt({ token, account, profile }) {
-            // Persist the OAuth access_token and provider info to the token
+            // Persist provider info to the token. The OAuth access_token is
+            // deliberately not stored: nothing uses it, and anything put on
+            // the session is readable by browser JS via /api/auth/session.
             if (account) {
-                token.accessToken = account.access_token;
                 token.provider = account.provider;
                 token.providerId = account.providerAccountId;
             }
@@ -29,7 +30,6 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             // Add custom properties to the session
             if (session.user) {
                 session.user.id = token.sub || "";
-                session.user.accessToken = token.accessToken as string;
                 session.user.provider = token.provider as string;
                 session.user.providerId = token.providerId as string;
             }
@@ -83,7 +83,6 @@ declare module "next-auth" {
             name?: string | null;
             email?: string | null;
             image?: string | null;
-            accessToken?: string;
             provider?: string;
             providerId?: string;
         };
