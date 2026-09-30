@@ -1,3 +1,4 @@
+import logging
 import os
 from typing import Dict
 from dotenv import load_dotenv
@@ -10,6 +11,8 @@ except Exception:
     ElevenLabs = None  # type: ignore
 
 load_dotenv()
+
+logger = logging.getLogger("hackinterview")
 
 class VoiceService:
     """Wrapper around ElevenLabs Text-to-Speech (v2 client API)."""
@@ -59,5 +62,6 @@ class VoiceService:
                         pass
             data = b"".join(chunks)
             return data
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"TTS Error: {str(e)}")
+        except Exception:
+            logger.exception("ElevenLabs text-to-speech failed")
+            raise HTTPException(status_code=500, detail="Text-to-speech failed.")

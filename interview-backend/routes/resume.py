@@ -10,6 +10,7 @@ from typing import List
 from schemas.resume import ATSReviewResponse, PlanPreviewResponse, PlanItem
 from services.resume_parser import ResumeParserService
 from services.gemini_service import GeminiService
+from config import logger
 
 router = APIRouter(prefix="/api", tags=["resume"])
 
@@ -56,8 +57,9 @@ async def parse_resume(file: UploadFile = File(...)):
         extracted_text = await _extract_resume_text(file)
     except HTTPException:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error parsing file: {e}")
+    except Exception:
+        logger.exception("Failed to parse resume")
+        raise HTTPException(status_code=500, detail="Could not parse the resume file.")
 
     return {"filename": file.filename, "extracted_text": extracted_text}
 
@@ -82,9 +84,9 @@ async def ats_review(
 
     except HTTPException:
         raise
-    except Exception as e:
-        print(f"Error in ats_review: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error processing resume: {str(e)}")
+    except Exception:
+        logger.exception("ATS review failed")
+        raise HTTPException(status_code=500, detail="Error processing resume.")
 
 
 @router.post("/preview-plan", response_model=PlanPreviewResponse)
@@ -128,7 +130,7 @@ async def analyze_resume(
     Returns ATS score, four quality metrics, and optional JD match score.
     """
     import json
-    from config import model, logger
+    from config import model
     import google.generativeai as genai
 
     try:
@@ -190,6 +192,6 @@ All scores must be integers 0-100. Be ruthlessly accurate. Return ONLY the JSON 
 
     except HTTPException:
         raise
-    except Exception as e:
-        print(f"Error in analyze_resume: {e}")
-        raise HTTPException(status_code=500, detail=f"Error processing resume: {str(e)}")
+    except Exception:
+        logger.exception("Resume analysis failed")
+        raise HTTPException(status_code=500, detail="Error processing resume.")

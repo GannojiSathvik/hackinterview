@@ -72,9 +72,9 @@ async def sync_user(request: UserSyncRequest):
         logger.info(f"Created new user: {request.email} with ID: {user_id} (20-day trial started)")
         return UserSyncResponse(success=True, user_id=user_id, message="User created successfully with 20-day free trial")
 
-    except Exception as e:
-        logger.error(f"Error syncing user: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to sync user: {str(e)}")
+    except Exception:
+        logger.exception("Error syncing user")
+        raise HTTPException(status_code=500, detail="Failed to sync user.")
 
 
 @router.get("/user/{email}")

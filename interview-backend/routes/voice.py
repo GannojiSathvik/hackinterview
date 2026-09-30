@@ -35,7 +35,8 @@ async def tts(tts_request: TTSRequest):
         return Response(content=audio_data, media_type="audio/mpeg")
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
+        logger.exception("Server TTS failed; telling client to use browser TTS")
         return {
             "fallback": "client_tts",
             "reason": "tts_error",
@@ -52,8 +53,9 @@ async def list_voices():
 
     try:
         return voice_service.list_voices()
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        logger.exception("Listing voices failed")
+        raise HTTPException(status_code=500, detail="Could not list voices.")
 
 
 @router.post("/stt")
@@ -108,8 +110,9 @@ async def speech_to_text(
             "text": transcribed_text,
             "openSmileFeatures": opensmile_features
         }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"STT error: {e}")
+    except Exception:
+        logger.exception("Speech-to-text failed")
+        raise HTTPException(status_code=500, detail="Speech-to-text failed.")
 
 
 @router.post("/analyze-voice", response_model=VoiceAnalysisResponse)
@@ -155,6 +158,6 @@ async def analyze_voice(
 
     except HTTPException:
         raise
-    except Exception as e:
-        logger.error(f"Voice analysis error: {e}")
-        raise HTTPException(status_code=500, detail=f"Voice analysis error: {e}")
+    except Exception:
+        logger.exception("Voice analysis failed")
+        raise HTTPException(status_code=500, detail="Voice analysis failed.")

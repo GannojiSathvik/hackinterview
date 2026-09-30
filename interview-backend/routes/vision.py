@@ -1,6 +1,8 @@
 """Vision / behavior analysis routes."""
 from fastapi import APIRouter, HTTPException
 
+from config import logger
+
 from schemas.vision import VisionAnalysisRequest, VisionAnalysisResponse
 from services.session_manager import sessions
 
@@ -34,9 +36,9 @@ async def analyze_behavior(request: VisionAnalysisRequest):
         return VisionAnalysisResponse(**result)
     except HTTPException:
         raise
-    except Exception as e:
-        print(f"Error in behavior analysis: {e}")
-        raise HTTPException(status_code=500, detail=f"Vision analysis error: {str(e)}")
+    except Exception:
+        logger.exception("Behavior analysis failed")
+        raise HTTPException(status_code=500, detail="Vision analysis failed.")
 
 
 @router.get("/behavior-summary/{session_id}")

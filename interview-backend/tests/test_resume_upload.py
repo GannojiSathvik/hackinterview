@@ -48,3 +48,15 @@ def test_unsupported_file_type_is_rejected(client, captured_paths):
 
     assert res.status_code == 400
     assert captured_paths == []
+
+
+def test_internal_errors_are_not_leaked_to_the_client(client, monkeypatch):
+    def broken_extract(file_path):
+        raise RuntimeError("internal detail: /srv/secret/path")
+
+    monkeypatch.setattr(ResumeParserService, "extract_text_from_pdf", staticmethod(broken_extract))
+
+    res = client.post("/api/parse-resume", files={"file": ("resume.pdf", b"%PDF-1.4", "application/pdf")})
+
+    assert res.status_code == 500
+    assert "secret" not in res.text
