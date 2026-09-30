@@ -55,3 +55,6 @@ start_all.sh
 nohup.out
 backend.log
 interview-backend/.env
+
+# Test caches
+.pytest_cache/
