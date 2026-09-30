@@ -402,26 +402,5 @@ profile by email.
   async client.
 - Fix the Docker Compose networking and environment variables.
 
----
 
-## Contributors
-
-
-Summarised from the commit messages:
-
-- **AninayMuthyapu** — initial backend and frontend, sign-up and
-  authentication, Postgres setup, openSMILE voice analysis, token tracking,
-  Docker files, and the later project restructuring.
-- **ruchir2005** — computer-vision behaviour monitoring (MediaPipe, webcam
-  metrics UI), Web Speech API text-to-speech/speech-to-text, Gemini
-  integration fixes, avatar integration, the online assessment (question
-  bank, server-side scoring, history, admin CRUD), Google Search grounding,
-  OAuth, and HR interview updates.
-- **GannojiSathvik** — fixed text-to-speech playback (waiting for audio to
-  finish, releasing blob URLs, falling back to browser speech) with tests; then
-  an audit and fix pass: answers graded against the wrong question, colliding
-  session ids, a 30% score penalty from empty posture reports, path traversal in
-  resume uploads, leaked MCQ answers, open CORS, leaked exception details, an
-  exposed OAuth token, and a broken Alembic driver setting; added the backend
-  pytest suite and this README.
 
