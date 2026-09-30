@@ -332,6 +332,11 @@ async def get_interview_summary(session_id: str):
     except Exception as e:
         print(f"Could not get posture report: {e}")
 
+    # A report built from zero analysed frames has readiness_score 0, which
+    # would drag the blended overall score down by 30%. Treat it as no data.
+    if posture_report and not posture_report.get("session_summary", {}).get("frames_analyzed"):
+        posture_report = None
+
     summary = await GeminiService.generate_interview_summary(
         sess, company_name, job_role, posture_report=posture_report
     )

@@ -128,3 +128,58 @@ def test_hr_interviews_get_separate_sessions(client, fake_start):
     second = client.post("/api/start-hr-interview").json()["sessionId"]
 
     assert first != second
+
+
+def _fake_posture_module(report):
+    import types
+    service = types.SimpleNamespace(stop_background=lambda session_id: report)
+    return types.SimpleNamespace(posture_service=service)
+
+
+@pytest.fixture
+def fake_summary_model(monkeypatch):
+    """Fake the Gemini model used by generate_interview_summary."""
+    import types
+    from services import gemini_service
+
+    text = '{"strengths": ["a"], "areas_for_improvement": ["b"], "recommendations": ["c"], "overall_feedback": "d"}'
+    fake_model = types.SimpleNamespace(generate_content=lambda *a, **k: types.SimpleNamespace(text=text))
+    monkeypatch.setattr(gemini_service, "model", fake_model)
+
+
+def _session_with_scores(session_id, scores):
+    _make_session(session_id, current_question="q")
+    sessions[session_id]["questions_and_answers"] = [
+        {"question": "q", "answer": "a", "score": s, "round_title": "Behavioral", "type": "behavioral"}
+        for s in scores
+    ]
+
+
+def test_empty_posture_report_does_not_lower_the_overall_score(client, fake_summary_model, monkeypatch):
+    import sys
+    empty_report = {
+        "session_summary": {"duration_seconds": 0, "frames_analyzed": 0},
+        "overall_assessment": {"readiness_score": 0, "recommendations": []},
+    }
+    monkeypatch.setitem(sys.modules, "services.posture_service", _fake_posture_module(empty_report))
+    _session_with_scores("s-empty-posture", [8, 6])
+
+    body = client.get("/api/interview-summary/s-empty-posture").json()
+
+    assert body["overall_score"] == 7.0
+    assert body["posture_report"] is None
+
+
+def test_posture_report_with_frames_is_blended_into_the_score(client, fake_summary_model, monkeypatch):
+    import sys
+    report = {
+        "session_summary": {"duration_seconds": 60, "frames_analyzed": 120},
+        "overall_assessment": {"readiness_score": 50, "recommendations": []},
+    }
+    monkeypatch.setitem(sys.modules, "services.posture_service", _fake_posture_module(report))
+    _session_with_scores("s-real-posture", [8, 6])
+
+    body = client.get("/api/interview-summary/s-real-posture").json()
+
+    # 70% Q&A (7.0) + 30% posture (50/100 -> 5.0) = 6.4
+    assert body["overall_score"] == 6.4
