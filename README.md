@@ -406,9 +406,6 @@ profile by email.
 
 ## Contributors
 
-This repository preserves the original team history from
-[ruchir2005/HackInterviewAI](https://github.com/ruchir2005/HackInterviewAI);
-each commit shows its author.
 
 Summarised from the commit messages:
 
@@ -428,4 +425,3 @@ Summarised from the commit messages:
   exposed OAuth token, and a broken Alembic driver setting; added the backend
   pytest suite and this README.
 
-No license file has been added yet, so all rights are reserved by the authors.
