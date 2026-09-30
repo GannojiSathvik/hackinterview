@@ -385,6 +385,12 @@ profile by email.
 - `VisionService` uses one engine instance for all users.
 - Gemini and OpenCV calls are synchronous inside `async` routes, so a slow
   call blocks other requests.
+- One interview makes many Gemini calls (plan, grounding, and per answer:
+  grading, soft skills, next question). When tested on a free-tier key,
+  `gemini-2.5-flash` was limited to 20 requests per day, which ran out
+  partway through a single interview. When a call fails, the app silently
+  falls back to built-in questions and a heuristic score; fallback feedback
+  is prefixed "📋 Smart Analysis" instead of "🤖 AI Feedback".
 - `google-generativeai` is deprecated upstream; the grounding feature already
   uses its replacement, `google-genai`.
 - `/generate_avatar` needs the Linly-Talker project or a `static/sample.mp4`,
