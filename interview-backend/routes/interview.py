@@ -1,4 +1,5 @@
 """Interview routes — start, submit, hint, summary, current session."""
+import uuid
 from datetime import datetime
 from typing import Dict, Any, Optional, Union
 
@@ -49,7 +50,7 @@ async def start_interview(
 
     interview_plan, _, _ = await GeminiService.generate_interview_plan(effective_company, effective_role, effective_yoe)
 
-    session_id = "mock_" + str(hash(effective_company.lower() + effective_role))[2:]
+    session_id = f"mock_{uuid.uuid4().hex}"
 
     initial_round = interview_plan[0]
     initial_question_data = await get_next_question_data(
@@ -96,8 +97,7 @@ async def start_interview(
 async def start_hr_interview():
     """Starts a specialized HR mock interview sequence."""
     
-    # Generate unique session ID
-    session_id = "hr_" + str(hash(datetime.now().isoformat()))[2:10]
+    session_id = f"hr_{uuid.uuid4().hex}"
     
     sessions[session_id] = {
         "company_name": "General",

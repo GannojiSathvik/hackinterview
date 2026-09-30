@@ -93,3 +93,38 @@ def test_submit_generates_only_the_next_question(client, fake_gemini):
 def test_unknown_session_returns_404(client, fake_gemini):
     res = client.post("/api/submit-answer", json={"sessionId": "does-not-exist", "userAnswer": "x"})
     assert res.status_code == 404
+
+
+@pytest.fixture
+def fake_start(monkeypatch):
+    """Fake plan/question generation and the posture engine for the start routes."""
+    import sys
+    import types
+
+    async def fake_plan(company, role, yoe):
+        return [{"title": "Behavioral", "type": "behavioral", "question_count": 1, "estimated_minutes": 10}], True, "test"
+
+    async def fake_next_question(session, round_info):
+        return QuestionResponse(question="first question", type="behavioral")
+
+    fake_posture = types.SimpleNamespace(start_background=lambda session_id: True)
+    monkeypatch.setattr(GeminiService, "generate_interview_plan", staticmethod(fake_plan))
+    monkeypatch.setattr(interview_routes, "get_next_question_data", fake_next_question)
+    monkeypatch.setitem(sys.modules, "services.posture_service", types.SimpleNamespace(posture_service=fake_posture))
+
+
+def test_same_company_and_role_get_separate_sessions(client, fake_start):
+    form = {"jobRole": "Backend Engineer", "companyName": "Acme", "yearsOfExperience": "2"}
+
+    first = client.post("/api/start-interview", data=form).json()["sessionId"]
+    second = client.post("/api/start-interview", data=form).json()["sessionId"]
+
+    assert first != second
+    assert first in sessions and second in sessions
+
+
+def test_hr_interviews_get_separate_sessions(client, fake_start):
+    first = client.post("/api/start-hr-interview").json()["sessionId"]
+    second = client.post("/api/start-hr-interview").json()["sessionId"]
+
+    assert first != second
