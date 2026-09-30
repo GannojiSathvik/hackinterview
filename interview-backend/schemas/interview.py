@@ -25,7 +25,9 @@ class CodingQuestionResponse(BaseModel):
 class MCQQuestionResponse(BaseModel):
     question: str = Field(..., description="The multiple-choice question.")
     options: List[str] = Field(..., description="An array of possible answers.")
-    correct_answer: str = Field(..., description="The correct answer to the question.")
+    # Kept server-side only: exclude=True leaves it out of every API response,
+    # so the answer is not visible in the browser before the user picks one.
+    correct_answer: str = Field(..., description="The correct answer to the question.", exclude=True)
     type: str = Field(..., description="Type of the question, 'mcq'.")
 
 

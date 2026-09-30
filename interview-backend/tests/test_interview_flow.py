@@ -183,3 +183,20 @@ def test_posture_report_with_frames_is_blended_into_the_score(client, fake_summa
 
     # 70% Q&A (7.0) + 30% posture (50/100 -> 5.0) = 6.4
     assert body["overall_score"] == 6.4
+
+
+def test_mcq_correct_answer_is_not_sent_to_the_client(client, fake_start, monkeypatch):
+    from schemas.interview import MCQQuestionResponse
+
+    async def fake_mcq_question(session, round_info):
+        return MCQQuestionResponse(
+            question="2 + 2 = ?", options=["A: 3", "B: 4"], correct_answer="B: 4", type="mcq"
+        )
+
+    monkeypatch.setattr(interview_routes, "get_next_question_data", fake_mcq_question)
+    form = {"jobRole": "Backend Engineer", "companyName": "Acme", "yearsOfExperience": "0"}
+
+    question = client.post("/api/start-interview", data=form).json()["questionData"]
+
+    assert question["options"] == ["A: 3", "B: 4"]
+    assert "correct_answer" not in question
