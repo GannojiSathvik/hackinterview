@@ -151,29 +151,9 @@ async def submit_answer(answer_data: InterviewAnswer):
     current_question_index = session["current_question_index"]
     current_round = interview_plan[current_round_index]
 
-    # Get question text for feedback
-    question_to_feedback = ""
-    if current_round["type"] in ["technical", "dsa"]:
-        q_data = await GeminiService.generate_coding_question(
-            job_role=session["job_role"],
-            years_of_experience=session["years_of_experience"],
-            company_name=session["company_name"],
-            round_title=current_round["title"],
-            round_type=current_round["type"]
-        )
-        question_to_feedback = q_data.question
-    elif current_round["type"] == "mcq":
-        q_data = await GeminiService.generate_mcq_questions(session["job_role"])
-        question_to_feedback = q_data.question
-    else:
-        q_data = await GeminiService.generate_question(
-            job_role=session["job_role"],
-            years_of_experience=session["years_of_experience"],
-            company_name=session["company_name"],
-            round_title=current_round["title"],
-            round_type=current_round["type"]
-        )
-        question_to_feedback = q_data.question
+    # Grade against the question the user was actually shown, which is stored
+    # on the session whenever a question is served.
+    question_to_feedback = session.get("current_question", "")
 
     feedback = await GeminiService.get_feedback_and_score(
         question=question_to_feedback,
