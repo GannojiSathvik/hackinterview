@@ -1,5 +1,6 @@
 """Resume routes — parse, ATS review, preview plan, resume analyzer."""
 import os
+import tempfile
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, File, UploadFile, Form
@@ -27,26 +28,36 @@ class ResumeAnalysisResponse(BaseModel):
     overall_feedback: str
 
 
-@router.post("/parse-resume")
-async def parse_resume(file: UploadFile = File(...)):
-    file_extension = file.filename.split('.')[-1].lower()
+async def _extract_resume_text(upload: UploadFile) -> str:
+    """Save an uploaded PDF/DOCX to a server-named temp file, extract its text,
+    and delete the file. The client's filename is only used for its extension,
+    never as part of the path, so it cannot point the write outside the temp dir."""
+    extension = os.path.splitext(upload.filename or "")[1].lower()
+    extractors = {
+        ".pdf": ResumeParserService.extract_text_from_pdf,
+        ".docx": ResumeParserService.extract_text_from_docx,
+    }
+    if extension not in extractors:
+        raise HTTPException(status_code=400, detail="Invalid file type. Please upload a PDF or DOCX file.")
 
-    file_path = f"/tmp/{file.filename}"
-    with open(file_path, "wb") as f:
-        f.write(await file.read())
-
-    extracted_text = ""
+    content = await upload.read()
+    fd, file_path = tempfile.mkstemp(suffix=extension)
     try:
-        if file_extension == 'pdf':
-            extracted_text = ResumeParserService.extract_text_from_pdf(file_path)
-        elif file_extension == 'docx':
-            extracted_text = ResumeParserService.extract_text_from_docx(file_path)
-        else:
-            raise HTTPException(status_code=400, detail="Invalid file type. Please upload a PDF or DOCX file.")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error parsing file: {e}")
+        with os.fdopen(fd, "wb") as f:
+            f.write(content)
+        return extractors[extension](file_path)
     finally:
         os.remove(file_path)
+
+
+@router.post("/parse-resume")
+async def parse_resume(file: UploadFile = File(...)):
+    try:
+        extracted_text = await _extract_resume_text(file)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error parsing file: {e}")
 
     return {"filename": file.filename, "extracted_text": extracted_text}
 
@@ -60,19 +71,8 @@ async def ats_review(
     if not jobDescription.strip():
         raise HTTPException(status_code=400, detail="Job description is required for ATS review.")
 
-    file_extension = resumeFile.filename.split('.')[-1].lower() if resumeFile.filename else ""
-    file_path = f"/tmp/{resumeFile.filename}"
-
     try:
-        with open(file_path, "wb") as f:
-            f.write(await resumeFile.read())
-
-        if file_extension == 'pdf':
-            resume_text = ResumeParserService.extract_text_from_pdf(file_path)
-        elif file_extension == 'docx':
-            resume_text = ResumeParserService.extract_text_from_docx(file_path)
-        else:
-            raise HTTPException(status_code=400, detail="Invalid file type. Please upload a PDF or DOCX file.")
+        resume_text = await _extract_resume_text(resumeFile)
 
         if not resume_text.strip():
             raise HTTPException(status_code=400, detail="Could not extract text from resume. Please check the file.")
@@ -85,12 +85,6 @@ async def ats_review(
     except Exception as e:
         print(f"Error in ats_review: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error processing resume: {str(e)}")
-    finally:
-        if 'file_path' in locals() and os.path.exists(file_path):
-            try:
-                os.remove(file_path)
-            except Exception as e:
-                print(f"Warning: Could not delete temporary file {file_path}: {str(e)}")
 
 
 @router.post("/preview-plan", response_model=PlanPreviewResponse)
@@ -137,19 +131,8 @@ async def analyze_resume(
     from config import model, logger
     import google.generativeai as genai
 
-    file_extension = (resumeFile.filename or "").split(".")[-1].lower()
-    file_path = f"/tmp/{resumeFile.filename}"
-
     try:
-        with open(file_path, "wb") as f:
-            f.write(await resumeFile.read())
-
-        if file_extension == "pdf":
-            resume_text = ResumeParserService.extract_text_from_pdf(file_path)
-        elif file_extension == "docx":
-            resume_text = ResumeParserService.extract_text_from_docx(file_path)
-        else:
-            raise HTTPException(status_code=400, detail="Invalid file type. Please upload a PDF or DOCX file.")
+        resume_text = await _extract_resume_text(resumeFile)
 
         if not resume_text.strip():
             raise HTTPException(status_code=400, detail="Could not extract text from resume.")
@@ -210,9 +193,3 @@ All scores must be integers 0-100. Be ruthlessly accurate. Return ONLY the JSON 
     except Exception as e:
         print(f"Error in analyze_resume: {e}")
         raise HTTPException(status_code=500, detail=f"Error processing resume: {str(e)}")
-    finally:
-        if os.path.exists(file_path):
-            try:
-                os.remove(file_path)
-            except Exception:
-                pass
