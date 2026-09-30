@@ -22,8 +22,10 @@ DATABASE_URL = os.getenv(
     "postgresql+asyncpg://postgres:postgres@127.0.0.1:15432/interviews"
 )
 
-# For sync operations (like Alembic migrations)
-SYNC_DATABASE_URL = DATABASE_URL.replace("+asyncpg", "")
+# For sync operations (like Alembic migrations). The driver is named
+# explicitly: a bare "postgresql://" means psycopg2 on SQLAlchemy 2.0 but
+# psycopg (v3) on 2.1+, and only psycopg2-binary is in requirements.txt.
+SYNC_DATABASE_URL = DATABASE_URL.replace("+asyncpg", "+psycopg2")
 
 # Create async engine
 engine = create_async_engine(
